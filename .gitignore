@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+server/data/
+*.log
+.DS_Store
+tsconfig.tsbuildinfo
+
+# Deploy guides & local helpers — not needed on GitHub
+docs/
+DEPLOY.md
+*.bat
+SKIP-GIT-UPLOAD.txt
+UPLOAD-THESE-TO-GITHUB.txt

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fff8dc"/>
+      <stop offset="35%" stop-color="#ffe566"/>
+      <stop offset="55%" stop-color="#e8c547"/>
+      <stop offset="100%" stop-color="#8a6f1e"/>
+    </linearGradient>
+    <radialGradient id="iris" cx="42%" cy="38%" r="55%">
+      <stop offset="0%" stop-color="#fffef0"/>
+      <stop offset="25%" stop-color="#ffe566"/>
+      <stop offset="55%" stop-color="#e8c547"/>
+      <stop offset="100%" stop-color="#5c4a12"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffe566" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#e8c547" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="#050508"/>
+  <path d="M64 80 L448 80 L464 96 L464 416 L448 432 L64 432 L48 416 L48 96 Z" fill="#0a0a12" stroke="url(#gold)" stroke-width="4"/>
+  <path d="M80 104 L432 104 L440 112 L440 400 L432 408 L80 408 L72 400 L72 112 Z" fill="none" stroke="url(#gold)" stroke-width="2" opacity="0.35"/>
+  <path d="M256 112 C144 112 80 192 96 288 C112 352 176 384 256 368" fill="none" stroke="url(#gold)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M256 112 C368 112 432 192 416 288 C400 352 336 384 256 368" fill="none" stroke="url(#gold)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M256 400 C192 336 160 272 176 208 C192 144 224 112 256 112" fill="none" stroke="url(#gold)" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="112" fill="url(#glow)"/>
+  <ellipse cx="256" cy="256" rx="56" ry="72" fill="url(#iris)"/>
+  <ellipse cx="256" cy="256" rx="9" ry="44" fill="#050508"/>
+  <ellipse cx="236" cy="232" rx="14" ry="18" fill="#fffef0" opacity="0.55"/>
+  <path d="M208 144 L256 96 L304 144 L288 160 L256 128 L224 160 Z" fill="url(#gold)"/>
+  <path d="M352 320 C320 384 224 400 160 352 C128 320 144 256 192 224" fill="none" stroke="url(#gold)" stroke-width="5" stroke-linecap="round" opacity="0.4"/>
+</svg>

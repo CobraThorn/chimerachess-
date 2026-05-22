@@ -1,0 +1,305 @@
+import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCustomisation } from "../../customisation";
+import { useGameClock } from "../../online/useGameClock";
+import type { OnlineClientState } from "../../online/useOnlineClient";
+import { formatClock } from "../../online/timeControls";
+import type { GameResult } from "../../online/types";
+import {
+  createInitialState,
+  fromFen,
+  getGameStatus,
+  getLegalMoves,
+  makeMove,
+  moveToUci,
+  PROMOTION_PIECES,
+} from "../../chess";
+import type { Color, GameState, Move, PieceType, Square } from "../../chess";
+import ChessBoardGrid from "./ChessBoardGrid";
+import ChessPiece from "./ChessPiece";
+
+interface OnlineMatchProps {
+  client: OnlineClientState;
+  onSendMove: (uci: string) => void;
+  onResign: () => void;
+  onOfferDraw: () => void;
+  onAcceptDraw: () => void;
+  onBack: () => void;
+}
+
+function resultMessage(
+  result: GameResult | null,
+  userColor: Color,
+  reason: string | null
+): string {
+  if (!result) return "Game over";
+  const userWin =
+    (result === "white-win" && userColor === "w") ||
+    (result === "black-win" && userColor === "b");
+  const userLoss =
+    (result === "white-win" && userColor === "b") ||
+    (result === "black-win" && userColor === "w");
+  if (result === "draw") return `Draw${reason ? ` (${reason})` : ""}`;
+  if (userWin) return `You win${reason ? ` — ${reason}` : ""}`;
+  if (userLoss) return `You lose${reason ? ` — ${reason}` : ""}`;
+  return "Game over";
+}
+
+export default function OnlineMatch({
+  client,
+  onSendMove,
+  onResign,
+  onOfferDraw,
+  onAcceptDraw,
+  onBack,
+}: OnlineMatchProps) {
+  const { pieceSet } = useCustomisation();
+  const match = client.match!;
+  const userColor = match.color;
+
+  const parsed = useMemo(
+    () => fromFen(match.fen) ?? createInitialState(),
+    [match.fen]
+  );
+
+  const [state, setState] = useState<GameState>(parsed);
+  const [selected, setSelected] = useState<Square | null>(null);
+  const [legalTargets, setLegalTargets] = useState<Move[]>([]);
+  const [lastMove, setLastMove] = useState<Move | null>(null);
+  const [promotionPick, setPromotionPick] = useState<{
+    from: Square;
+    to: Square;
+  } | null>(null);
+
+  useEffect(() => {
+    const next = fromFen(match.fen);
+    if (next) {
+      setState(next);
+      setSelected(null);
+      setLegalTargets([]);
+      setPromotionPick(null);
+    }
+  }, [match.fen]);
+
+  const turn = state.turn;
+  const userTurn = turn === userColor;
+  const status = getGameStatus(state);
+  const displayClock = useGameClock(
+    match.clock,
+    turn,
+    match.turnStartedAt
+  );
+
+  const applyLocalMove = useCallback(
+    (move: Move) => {
+      const next = makeMove(state, move);
+      if (!next) return;
+      const uci = moveToUci(move);
+      setState(next);
+      setLastMove(move);
+      setSelected(null);
+      setLegalTargets([]);
+      setPromotionPick(null);
+      onSendMove(uci);
+    },
+    [state, onSendMove]
+  );
+
+  const onSquareClick = (sq: Square) => {
+    if (!userTurn || client.phase !== "playing") return;
+    if (promotionPick) return;
+
+    const piece = state.board[sq];
+    const targetMove = legalTargets.find((m) => m.to === sq);
+
+    if (targetMove) {
+      const promos = legalTargets.filter((m) => m.to === sq && m.promotion);
+      if (promos.length > 1) {
+        setPromotionPick({ from: selected!, to: sq });
+        return;
+      }
+      applyLocalMove(promos[0] ?? targetMove);
+      return;
+    }
+
+    if (piece && piece.color === userColor) {
+      setSelected(sq);
+      setLegalTargets(getLegalMoves(state, sq));
+      return;
+    }
+
+    setSelected(null);
+    setLegalTargets([]);
+  };
+
+  const onPromotion = (type: PieceType) => {
+    if (!promotionPick) return;
+    const move = legalTargets.find(
+      (m) => m.to === promotionPick.to && m.promotion === type
+    );
+    if (move) applyLocalMove(move);
+  };
+
+  const myMs = userColor === "w" ? displayClock.w : displayClock.b;
+  const oppMs = userColor === "w" ? displayClock.b : displayClock.w;
+  const lowTime = myMs < 10_000;
+
+  return (
+    <div className="flex w-full max-w-5xl flex-col gap-8 lg:flex-row lg:items-start lg:justify-center">
+      <div className="flex flex-col items-center gap-6">
+        <div className="flex w-full max-w-[min(92vw,520px)] flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.25em] text-gold-glow uppercase">
+              {match.tcLabel} · Online
+            </p>
+            <p className="mt-1 font-[family-name:var(--font-body)] text-[11px] text-[rgba(255,255,255,0.45)]">
+              vs {match.opponent.name} · You are {userColor === "w" ? "White" : "Black"}
+            </p>
+          </div>
+          <div className="flex gap-4 font-[family-name:var(--font-display)] text-2xl tabular-nums">
+            <span
+              className={
+                userColor === "w"
+                  ? lowTime
+                    ? "text-[rgba(255,100,100,0.95)]"
+                    : "text-gold-glow"
+                  : "text-[rgba(255,255,255,0.35)]"
+              }
+            >
+              {formatClock(displayClock.w)}
+            </span>
+            <span className="text-[rgba(255,255,255,0.2)]">:</span>
+            <span
+              className={
+                userColor === "b"
+                  ? lowTime
+                    ? "text-[rgba(255,100,100,0.95)]"
+                    : "text-gold-glow"
+                  : "text-[rgba(255,255,255,0.35)]"
+              }
+            >
+              {formatClock(displayClock.b)}
+            </span>
+          </div>
+        </div>
+
+        <div className="relative">
+          <ChessBoardGrid
+            state={state}
+            orientation={userColor}
+            selected={selected}
+            legalTargets={legalTargets}
+            lastMove={lastMove}
+            onSquareClick={onSquareClick}
+            disabled={!userTurn || client.phase !== "playing"}
+            showCorners={false}
+          />
+
+          <AnimatePresence>
+            {promotionPick && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 flex items-center justify-center bg-[rgba(5,5,8,0.8)]"
+              >
+                <div className="glass-panel rounded-sm px-6 py-4">
+                  <p className="mb-3 text-center font-[family-name:var(--font-hud)] text-[9px] tracking-[0.3em] text-[rgba(232,197,71,0.7)]">
+                    PROMOTE
+                  </p>
+                  <div className="flex gap-3">
+                    {PROMOTION_PIECES.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => onPromotion(t)}
+                        className="flex h-12 w-12 items-center justify-center"
+                      >
+                        <ChessPiece
+                          color={userColor}
+                          type={t}
+                          pieceSet={pieceSet}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <p className="font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.4)]">
+          {client.phase === "playing"
+            ? userTurn
+              ? "Your move"
+              : `${match.opponent.name} is thinking…`
+            : resultMessage(client.result, userColor, client.endReason)}
+        </p>
+      </div>
+
+      <aside className="glass-panel w-full max-w-xs rounded-sm p-6">
+        <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.3em] text-[rgba(255,255,255,0.35)] uppercase">
+          Your clock
+        </p>
+        <p
+          className={`mt-1 font-[family-name:var(--font-display)] text-3xl ${
+            lowTime ? "text-[rgba(255,100,100,0.95)]" : "text-gold-glow"
+          }`}
+        >
+          {formatClock(myMs)}
+        </p>
+        <p className="mt-4 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.3em] text-[rgba(255,255,255,0.35)] uppercase">
+          {match.opponent.name}
+        </p>
+        <p className="mt-1 font-[family-name:var(--font-display)] text-xl text-[rgba(255,255,255,0.5)]">
+          {formatClock(oppMs)}
+        </p>
+
+        {client.phase === "playing" && (
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={onOfferDraw}
+              className="nav-link rounded-sm px-3 py-2 text-[9px]"
+            >
+              Offer draw
+            </button>
+            {client.drawOffered && (
+              <button
+                type="button"
+                onClick={onAcceptDraw}
+                className="rounded-sm border border-[rgba(0,229,255,0.35)] px-3 py-2 font-[family-name:var(--font-hud)] text-[9px] text-[rgba(0,229,255,0.8)]"
+              >
+                Accept draw
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onResign}
+              className="rounded-sm border border-[rgba(255,100,100,0.25)] px-3 py-2 font-[family-name:var(--font-hud)] text-[9px] text-[rgba(255,120,120,0.85)]"
+            >
+              Resign
+            </button>
+          </div>
+        )}
+
+        {client.phase === "ended" && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mt-6 w-full nav-link rounded-sm px-3 py-2 text-[9px]"
+          >
+            Back to pools
+          </button>
+        )}
+
+        {status.type === "check" && client.phase === "playing" && (
+          <p className="mt-4 text-[10px] text-[rgba(232,197,71,0.6)]">
+            {status.color === userColor ? "You are in check" : "Opponent in check"}
+          </p>
+        )}
+      </aside>
+    </div>
+  );
+}

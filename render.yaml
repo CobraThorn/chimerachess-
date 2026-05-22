@@ -1,0 +1,26 @@
+# Render Blueprint — CHIMERA Data API
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: Render Dashboard → New → Blueprint → connect this repo
+# Or: render deploy (Render CLI)
+
+services:
+  - type: web
+    name: chimera-data-api
+    runtime: node
+    plan: free
+    region: oregon
+    # API only — skip Stockfish copy (frontend build runs on Netlify)
+    buildCommand: npm install --omit=dev --ignore-scripts
+    startCommand: npm start
+    healthCheckPath: /api/chimera/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Your live site origin (required for browser API + WebSocket from Netlify)
+      - key: CHIMERA_CORS_ORIGIN
+        value: https://chimerachess.co.uk
+    disk:
+      name: chimera-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
