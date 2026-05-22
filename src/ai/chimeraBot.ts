@@ -71,13 +71,18 @@ export async function getChimeraMove(
     }
   }
 
+  const targetElo = Math.max(
+    100,
+    Math.min(memory.chimeraElo ?? START_ELO, 3200)
+  );
+
   const blunderRate = Math.min(
-    0.75,
+    0.35,
     Math.max(
-      0.08,
+      0.05,
       (mirror
-        ? Math.max(0.2, 0.45 - memory.adaptation * 0.003)
-        : Math.max(0.12, 0.55 - memory.adaptation * 0.005)) + bias.blunderRateDelta
+        ? Math.max(0.15, 0.35 - memory.adaptation * 0.003)
+        : Math.max(0.08, 0.22 - memory.adaptation * 0.002)) + bias.blunderRateDelta
     )
   );
   if (Math.random() < blunderRate) {
@@ -85,25 +90,28 @@ export async function getChimeraMove(
     if (randomMove) return moveToUci(randomMove);
   }
 
-  const targetElo = Math.max(
-    START_ELO,
-    Math.min(memory.chimeraElo, 1350)
-  );
   const depth = Math.max(
     1,
     Math.min(
-      5,
+      mirror ? 4 : 6,
       (mirror
         ? Math.max(1, Math.min(3, chimeraColor === "w" ? 2 : 1))
-        : Math.max(1, Math.min(4, 1 + Math.floor(memory.adaptation / 25)))) +
-        bias.depthDelta
+        : Math.max(
+            2,
+            Math.min(5, 2 + Math.floor(targetElo / 500) + Math.floor(memory.adaptation / 35))
+          )) + bias.depthDelta
     )
   );
 
+  const skillLevel = Math.min(
+    20,
+    Math.max(0, Math.floor((targetElo - 1320) / 60))
+  );
+
   await configureEngine(engine, {
-    limitStrength: targetElo >= 1350,
-    elo: targetElo >= 1350 ? targetElo : undefined,
-    skillLevel: Math.min(5, Math.floor(memory.adaptation / 20)),
+    limitStrength: true,
+    elo: targetElo,
+    skillLevel,
   });
 
   const pickWeakerChance = mirror ? bias.randomTopMoveChance : 0.35;

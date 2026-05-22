@@ -5,6 +5,16 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  VITE_CHIMERA_API_URL = "https://chimerachess-0so2.onrender.com"
+
+# Proxy API to Render (before SPA fallback). Works even if VITE_CHIMERA_API_URL is unset.
+[[redirects]]
+  from = "/api/chimera/*"
+  to = "https://chimerachess-0so2.onrender.com/api/chimera/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

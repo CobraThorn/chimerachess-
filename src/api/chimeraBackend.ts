@@ -1,6 +1,7 @@
 import { loadAccount, loadDataEvents, saveDataEvents } from "../account/storage";
 import type { DataCollectionEvent, UserAccount } from "../account/types";
 import { ACCOUNT_EVENT } from "../account/types";
+import { resolveApiBase } from "../config/productionApi";
 
 const SYNC_QUEUE_KEY = "chimera-sync-queue-v1";
 const SYNC_META_KEY = "chimera-sync-meta-v1";
@@ -20,9 +21,7 @@ export interface SyncResult {
 }
 
 function apiBase(): string {
-  const env = import.meta.env.VITE_CHIMERA_API_URL as string | undefined;
-  if (env?.trim()) return env.trim().replace(/\/$/, "");
-  return "";
+  return resolveApiBase();
 }
 
 export function isBackendConfigured(): boolean {
@@ -99,12 +98,22 @@ function accountPayload(account: UserAccount) {
   };
 }
 
+async function parseJsonResponse<T>(res: Response): Promise<T | null> {
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) return null;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 export async function checkBackendHealth(): Promise<boolean> {
   try {
     const res = await fetch(healthEndpoint(), { method: "GET" });
     if (!res.ok) return false;
-    const data = (await res.json()) as { ok?: boolean };
-    return !!data.ok;
+    const data = await parseJsonResponse<{ ok?: boolean }>(res);
+    return !!data?.ok;
   } catch {
     return false;
   }
@@ -137,12 +146,24 @@ export async function syncToBackend(): Promise<SyncResult> {
       }),
     });
 
-    const data = (await res.json()) as {
+    const data = await parseJsonResponse<{
       ok?: boolean;
       error?: string;
       syncedAt?: number;
       eventsAppended?: number;
-    };
+    }>(res);
+
+    if (!data) {
+      const err =
+        "API returned HTML, not JSON. On Netlify set VITE_CHIMERA_API_URL to https://chimerachess-0so2.onrender.com (not chimerachess.co.uk), then redeploy.";
+      saveSyncMeta({
+        ...loadSyncMeta(),
+        lastError: err,
+        lastOk: false,
+        pendingCount: events.length,
+      });
+      return { ok: false, error: err };
+    }
 
     if (!res.ok || !data.ok) {
       const err = data.error ?? `HTTP ${res.status}`;

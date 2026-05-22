@@ -289,7 +289,9 @@ export default function AccountDataSection() {
                   ? "…"
                   : apiOnline
                     ? "ONLINE"
-                    : "OFFLINE — run npm run server"}
+                    : import.meta.env.DEV
+                      ? "OFFLINE — run npm run server (or npm run dev:full)"
+                      : "OFFLINE — check Netlify VITE_CHIMERA_API_URL → Render"}
               </p>
               <p className="mt-1 font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.4)]">
                 {syncMeta.lastOk && syncMeta.lastSyncedAt

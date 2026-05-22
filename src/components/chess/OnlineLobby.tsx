@@ -104,8 +104,18 @@ export default function OnlineLobby({
           {client.error}
           {!client.connected && (
             <span className="block mt-2 text-[rgba(255,255,255,0.35)]">
-              Run <code className="text-[rgba(0,229,255,0.7)]">npm run dev:full</code> so the
-              API and WebSocket are up.
+              {import.meta.env.DEV ? (
+                <>
+                  Run <code className="text-[rgba(0,229,255,0.7)]">npm run dev:full</code> so the
+                  API and WebSocket are up.
+                </>
+              ) : (
+                <>
+                  Online needs the Render API (WebSocket). Set Netlify{" "}
+                  <code className="text-[rgba(0,229,255,0.7)]">VITE_CHIMERA_API_URL</code> to your
+                  Render URL and redeploy. Both players pick the same pool (bullet / blitz / rapid).
+                </>
+              )}
             </span>
           )}
         </p>

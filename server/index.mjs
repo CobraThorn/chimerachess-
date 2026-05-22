@@ -108,6 +108,17 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
 
   try {
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "")) {
+      send(res, 200, {
+        ok: true,
+        service: "chimera-data-api",
+        message: "CHIMERA API is running. Use /api/chimera/health or deploy the app on Netlify.",
+        health: "/api/chimera/health",
+        websocket: "/api/chimera/ws",
+      });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/chimera/health") {
       await ensureDirs();
       const stats = await getStats();
