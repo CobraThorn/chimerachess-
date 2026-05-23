@@ -1,14 +1,12 @@
 import { analyzeUserMove } from "../ai/mistakeAnalyzer";
 import type { GameMoveRecord } from "../ai/types";
 import type { MistakeCategory } from "../ai/types";
+import { createInitialState } from "../chess/board";
+import { toFen } from "../chess/fen";
 import { evalFromResult, formatEvalLabel } from "../engine/analysis";
 import type { StockfishEngine } from "../engine/stockfish";
 import { getEvaluation, getTopMoves } from "../engine/stockfish";
-import { createInitialState } from "../chess/board";
-import { toFen } from "../chess/fen";
-
-const START_FEN = toFen(createInitialState());
-import { buildRecapSteps } from "./replay";
+import { buildRecapSteps, stateAtPly } from "./replay";
 import type {
   EvalPoint,
   GamePhaseStats,
@@ -21,6 +19,7 @@ import type {
 
 const USER_DEPTH = 12;
 const TIMELINE_DEPTH = 8;
+const START_FEN = toFen(createInitialState());
 
 function gradeFromCpLoss(cpLoss: number, playedBest: boolean): MoveGrade {
   if (cpLoss <= 3 && playedBest) return "brilliant";
@@ -100,13 +99,27 @@ function buildNarrative(report: Omit<GameReviewReport, "narrative">): string[] {
   return lines.slice(0, 6);
 }
 
+/** FEN after `ply` half-moves have been played (0 = start). */
+function fenAfterPly(moves: GameMoveRecord[], ply: number): string {
+  const { state } = stateAtPly(moves, ply);
+  return toFen(state);
+}
+
 export async function buildGameReview(
   engine: StockfishEngine,
   input: GameReviewInput,
   onProgress?: (p: ReviewProgress) => void
 ): Promise<GameReviewReport> {
-  const userMoves = input.moves.filter((m) => m.by === "user");
-  const totalSteps = input.moves.length + userMoves.length + 2;
+  if (!input.moves.length) {
+    throw new Error("No moves to review");
+  }
+
+  engine.stop();
+
+  const userMoveIndices = input.moves
+    .map((m, i) => (m.by === "user" ? i : -1))
+    .filter((i) => i >= 0);
+  const totalSteps = input.moves.length + userMoveIndices.length + 3;
   let step = 0;
   const tick = (label: string) => {
     step += 1;
@@ -114,43 +127,48 @@ export async function buildGameReview(
   };
 
   tick("Building evaluation timeline…");
-  const evalTimeline: EvalPoint[] = [{ ply: 0, cpWhite: 0, label: "0.0" }];
-  for (let i = 0; i < input.moves.length; i++) {
-    const m = input.moves[i];
-    const evalRes = await getEvaluation(engine, m.fen, TIMELINE_DEPTH);
-    const { cpWhite } = evalFromResult(m.fen, evalRes);
+  const evalTimeline: EvalPoint[] = [];
+  const timelineDepth =
+    input.moves.length > 36 ? 6 : TIMELINE_DEPTH;
+
+  for (let ply = 0; ply <= input.moves.length; ply++) {
+    const fen = ply === 0 ? START_FEN : fenAfterPly(input.moves, ply);
+    const evalRes = await getEvaluation(engine, fen, timelineDepth);
+    const { cpWhite } = evalFromResult(fen, evalRes);
     evalTimeline.push({
-      ply: i + 1,
+      ply,
       cpWhite,
       label: formatEvalLabel(cpWhite, evalRes.isMate, evalRes.mateIn),
     });
-    if (i % 4 === 0) tick(`Timeline ${i + 1}/${input.moves.length}`);
+    if (ply > 0 && ply % 4 === 0) {
+      tick(`Timeline ${ply}/${input.moves.length}`);
+    }
   }
 
   tick("Grading your moves…");
   const userAnalyses: ReviewMoveAnalysis[] = [];
-  let fenBefore = START_FEN;
-  let ply = 0;
 
-  for (const m of input.moves) {
-    ply += 1;
-    if (m.by !== "user") {
-      fenBefore = m.fen;
-      continue;
-    }
+  for (let i = 0; i < input.moves.length; i++) {
+    const m = input.moves[i];
+    if (m.by !== "user") continue;
+
+    const ply = i + 1;
+    const fenBefore = fenAfterPly(input.moves, i);
+    const fenAfter = fenAfterPly(input.moves, ply);
 
     const mistake = await analyzeUserMove(
       engine,
       fenBefore,
-      m.fen,
+      fenAfter,
       m.uci,
-      input.userColor
+      input.userColor,
+      USER_DEPTH
     );
     const top = await getTopMoves(engine, fenBefore, USER_DEPTH, 1).then((t) => t[0]);
     const evalBefore = await getEvaluation(engine, fenBefore, USER_DEPTH);
-    const evalAfter = await getEvaluation(engine, m.fen, USER_DEPTH);
+    const evalAfter = await getEvaluation(engine, fenAfter, USER_DEPTH);
     const beforeW = evalFromResult(fenBefore, evalBefore).cpWhite;
-    const afterW = evalFromResult(m.fen, evalAfter).cpWhite;
+    const afterW = evalFromResult(fenAfter, evalAfter).cpWhite;
     const cpLoss = mistake?.cpLoss ?? 0;
     const playedBest = top?.move === m.uci;
     const grade = gradeFromCpLoss(cpLoss, playedBest);
@@ -160,7 +178,7 @@ export async function buildGameReview(
       uci: m.uci,
       san: m.san,
       fenBefore,
-      fenAfter: m.fen,
+      fenAfter,
       grade,
       cpLoss,
       bestUci: top?.move ?? m.uci,
@@ -171,8 +189,7 @@ export async function buildGameReview(
       isCritical: cpLoss >= 120,
       insight: insightFor(grade, cpLoss, top?.move ?? m.uci, m.uci),
     });
-    fenBefore = m.fen;
-    tick(`Move ${userAnalyses.length}/${userMoves.length}`);
+    tick(`Move ${userAnalyses.length}/${userMoveIndices.length}`);
   }
 
   const counts = { brilliant: 0, great: 0, good: 0, inaccuracies: 0, mistakes: 0, blunders: 0 };

@@ -40,7 +40,7 @@ export default function GameReviewRecap({
   gptEnabled,
   onEnsureNote,
 }: GameReviewRecapProps) {
-  const maxPly = report.recapSteps.length - 1;
+  const maxPly = Math.max(0, report.recapSteps.length - 1);
   const [ply, setPly] = useState(maxPly);
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export default function GameReviewRecap({
   const step = report.recapSteps[ply];
   const note = notes.get(ply);
   const userMove = report.userMoves.find((u) => u.ply === ply);
-  const evalPt = report.evalTimeline[ply];
+  const evalPt = report.evalTimeline[ply] ?? report.evalTimeline[report.evalTimeline.length - 1];
 
   const engineHighlight = useMemo(() => {
     if (!userMove?.bestUci || userMove.uci === userMove.bestUci) return null;
@@ -228,7 +228,13 @@ export default function GameReviewRecap({
                   </p>
                 )}
               </>
-            ) : null}
+            ) : (
+              <p className="font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
+                {step
+                  ? `${step.mover === "user" ? "Your" : step.mover === "chimera" ? "Opponent" : "Position"}: ${step.moveLabel}. Scrub the timeline or pick a move in the list.`
+                  : "Select a ply to see coach notes."}
+              </p>
+            )}
           </div>
 
           <div className="max-h-48 space-y-1 overflow-y-auto rounded-sm border border-[rgba(255,255,255,0.05)] p-2">

@@ -133,7 +133,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   const endedRef = useRef(false);
   const reviewStartedRef = useRef(false);
 
-  const { report, loading, progress, runReview, dismiss } = useGameReview();
+  const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
   const memory = loadMemory();
   const crs = ensureCrsState(memory);
   const chimeraElo = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
@@ -159,10 +159,12 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     (move: Move, by: "user" | "chimera", before: GameState) => {
       const g = gameRef.current;
       if (!g) return;
+      const after = makeMove(before, move);
+      if (!after) return;
       g.moves.push({
         uci: moveToUci(move),
         san: formatMove(before, move),
-        fen: toFen(before),
+        fen: toFen(after),
         by,
       });
     },
@@ -286,7 +288,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   useEffect(() => {
     if (phase !== "ended" || reviewStartedRef.current) return;
     const g = gameRef.current;
-    if (!g || g.moves.length < 2 || !result) return;
+    if (!g || g.moves.length < 1 || !result) return;
     reviewStartedRef.current = true;
 
     const stored: StoredGame = {
@@ -311,24 +313,27 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
       setCrsPostGame(next.crs.lastPostGame);
     }
 
+    const reviewInput: GameReviewInput = {
+      id: g.id,
+      mode: "online",
+      opponentLabel: BOT_NAME,
+      userColor,
+      result: reviewResult(result, userColor),
+      startedAt: g.startedAt,
+      endedAt: Date.now(),
+      moves: g.moves,
+    };
+
     const engine = createStockfishEngine();
+    let cancelled = false;
     const timer = setInterval(() => {
-      if (!engine.ready) return;
+      if (cancelled || !engine.ready) return;
       clearInterval(timer);
-      const input: GameReviewInput = {
-        id: g.id,
-        mode: "online",
-        opponentLabel: BOT_NAME,
-        userColor,
-        result: reviewResult(result, userColor),
-        startedAt: g.startedAt,
-        endedAt: Date.now(),
-        moves: g.moves,
-      };
-      void runReview(engine, input);
+      void runReview(engine, reviewInput);
     }, 120);
 
     return () => {
+      cancelled = true;
       clearInterval(timer);
       engine.quit();
     };
@@ -451,6 +456,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         report={report}
         loading={loading}
         progress={progress}
+        error={reviewError}
         onClose={dismiss}
       />
       <motion.div

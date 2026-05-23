@@ -73,9 +73,10 @@ export default function ChimeraMatch() {
   const [lastInsight, setLastInsight] = useState<string | null>(null);
   const [gameOver, setGameOver] = useState<string | null>(null);
   const [reviewInput, setReviewInput] = useState<GameReviewInput | null>(null);
-  const { report, loading, progress, runReview, dismiss } = useGameReview();
+  const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
 
   const engineRef = useRef<StockfishEngine | null>(null);
+  const reviewEngineRef = useRef<StockfishEngine | null>(null);
   const gameRef = useRef<{
     id: string;
     moves: GameMoveRecord[];
@@ -152,9 +153,22 @@ export default function ChimeraMatch() {
   }, [startNewGame]);
 
   useEffect(() => {
-    if (!reviewInput || !sfReady || !engineRef.current) return;
-    void runReview(engineRef.current, reviewInput);
-  }, [reviewInput, sfReady, runReview]);
+    if (!reviewInput) return;
+
+    const engine = createStockfishEngine();
+    reviewEngineRef.current = engine;
+    const timer = setInterval(() => {
+      if (!engine.ready) return;
+      clearInterval(timer);
+      void runReview(engine, reviewInput);
+    }, 120);
+
+    return () => {
+      clearInterval(timer);
+      engine.quit();
+      reviewEngineRef.current = null;
+    };
+  }, [reviewInput, runReview]);
 
   useEffect(() => {
     const onMemoryUpdate = () => setMemory(loadMemory());
@@ -425,6 +439,7 @@ export default function ChimeraMatch() {
       report={report}
       loading={loading}
       progress={progress}
+      error={reviewError}
       onClose={() => {
         dismiss();
         setReviewInput(null);

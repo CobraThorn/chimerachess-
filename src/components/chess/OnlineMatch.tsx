@@ -85,7 +85,7 @@ export default function OnlineMatch({
     to: Square;
   } | null>(null);
 
-  const { report, loading, progress, runReview, dismiss } = useGameReview();
+  const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
   const reviewEngineRef = useRef<StockfishEngine | null>(null);
   const reviewStartedRef = useRef(false);
   const [crsPostGame, setCrsPostGame] = useState<CrsPostGameSummary | null>(null);
@@ -98,16 +98,17 @@ export default function OnlineMatch({
   useEffect(() => {
     if (client.phase !== "ended" || reviewStartedRef.current) return;
     const history = match.moveHistory ?? [];
-    if (history.length < 2) return;
+    if (history.length < 1) return;
     reviewStartedRef.current = true;
 
     const result = onlineResultToReview(client.result, userColor);
+    const moveRecords = onlineMovesToRecords(history);
     const stored: StoredGame = {
       id: match.gameId,
       startedAt: match.startedAt,
       endedAt: Date.now(),
       userColor,
-      moves: onlineMovesToRecords(history),
+      moves: moveRecords,
       mistakes: [],
       result,
       openingLine: history
@@ -124,27 +125,34 @@ export default function OnlineMatch({
       setCrsPostGame(next.crs.lastPostGame);
     }
 
+    const reviewInput = {
+      id: match.gameId,
+      mode: "online" as const,
+      opponentLabel: match.opponent.name,
+      userColor,
+      result: onlineResultToReview(client.result, userColor),
+      startedAt: match.startedAt,
+      endedAt: Date.now(),
+      moves: moveRecords,
+    };
+
     const engine = createStockfishEngine();
     reviewEngineRef.current = engine;
+    let cancelled = false;
+
     const timer = setInterval(() => {
-      if (!engine.ready) return;
+      if (cancelled || !engine.ready) return;
       clearInterval(timer);
-      void runReview(engine, {
-        id: match.gameId,
-        mode: "online",
-        opponentLabel: match.opponent.name,
-        userColor,
-        result: onlineResultToReview(client.result, userColor),
-        startedAt: match.startedAt,
-        endedAt: Date.now(),
-        moves: onlineMovesToRecords(history),
-      });
+      void runReview(engine, reviewInput);
     }, 120);
 
     return () => {
+      cancelled = true;
       clearInterval(timer);
-      engine.quit();
-      reviewEngineRef.current = null;
+      if (reviewEngineRef.current === engine) {
+        engine.quit();
+        reviewEngineRef.current = null;
+      }
     };
   }, [
     client.phase,
@@ -249,6 +257,7 @@ export default function OnlineMatch({
       report={report}
       loading={loading}
       progress={progress}
+      error={reviewError}
       onClose={dismiss}
     />
     <div className="flex w-full max-w-5xl flex-col gap-8 lg:flex-row lg:items-start lg:justify-center">

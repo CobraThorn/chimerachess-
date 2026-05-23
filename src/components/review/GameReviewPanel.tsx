@@ -34,6 +34,7 @@ interface GameReviewPanelProps {
   report: GameReviewReport | null;
   loading: boolean;
   progress: ReviewProgress | null;
+  error?: string | null;
   onClose: () => void;
   onNewGame?: () => void;
 }
@@ -42,12 +43,13 @@ export default function GameReviewPanel({
   report,
   loading,
   progress,
+  error = null,
   onClose,
   onNewGame,
 }: GameReviewPanelProps) {
   const coach = useReviewCoach(report);
 
-  if (!loading && !report) return null;
+  if (!loading && !report && !error) return null;
 
   const pct = progress
     ? Math.round((progress.step / Math.max(1, progress.total)) * 100)
@@ -66,6 +68,24 @@ export default function GameReviewPanel({
       >
         <span className="hud-corner hud-corner--tl" />
         <span className="hud-corner hud-corner--br" />
+
+        {error && !loading && !report && (
+          <div className="py-12 text-center">
+            <p className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.4em] text-[rgba(255,120,120,0.8)] uppercase">
+              Review failed
+            </p>
+            <p className="mt-4 font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.55)]">
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-8 nav-link rounded-sm px-5 py-2.5 text-[9px]"
+            >
+              Close
+            </button>
+          </div>
+        )}
 
         {loading && (
           <div className="py-16 text-center">
