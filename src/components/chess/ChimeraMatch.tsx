@@ -160,16 +160,20 @@ export default function ChimeraMatch() {
   useEffect(() => {
     if (!reviewInput) return;
 
+    engineRef.current?.stop();
     const engine = createStockfishEngine();
     reviewEngineRef.current = engine;
+    let cancelled = false;
     const timer = setInterval(() => {
-      if (!engine.ready) return;
+      if (cancelled || !engine.ready) return;
       clearInterval(timer);
       void runReview(engine, reviewInput);
     }, 120);
 
     return () => {
+      cancelled = true;
       clearInterval(timer);
+      engine.stop();
       engine.quit();
       reviewEngineRef.current = null;
     };

@@ -1,11 +1,11 @@
-import { analyzeUserMove } from "../ai/mistakeAnalyzer";
+import { gradeUserMoveForReview } from "../ai/mistakeAnalyzer";
 import type { GameMoveRecord } from "../ai/types";
 import type { MistakeCategory } from "../ai/types";
 import { createInitialState } from "../chess/board";
 import { toFen } from "../chess/fen";
 import { evalFromResult, formatEvalLabel } from "../engine/analysis";
 import type { StockfishEngine } from "../engine/stockfish";
-import { getEvaluation, getTopMoves } from "../engine/stockfish";
+import { getEvaluation } from "../engine/stockfish";
 import {
   formatAvgMissPerMove,
   formatEnginePreferredOver,
@@ -29,7 +29,7 @@ import type {
   ReviewProgress,
 } from "./types";
 
-const USER_DEPTH = 14;
+const USER_DEPTH = 12;
 const TIMELINE_DEPTH = 10;
 const START_FEN = toFen(createInitialState());
 
@@ -138,6 +138,7 @@ export async function buildGameReview(
 
   for (let ply = 0; ply <= input.moves.length; ply++) {
     const fen = ply === 0 ? START_FEN : fenAfterPly(input.moves, ply);
+    engine.stop();
     const evalRes = await getEvaluation(engine, fen, timelineDepth);
     const { cpWhite } = evalFromResult(fen, evalRes);
     evalTimeline.push({
@@ -162,7 +163,7 @@ export async function buildGameReview(
     const fenAfter = fenAfterPly(input.moves, ply);
     const stateBefore = stateAtPly(input.moves, i).state;
 
-    const mistake = await analyzeUserMove(
+    const graded = await gradeUserMoveForReview(
       engine,
       fenBefore,
       fenAfter,
@@ -170,22 +171,18 @@ export async function buildGameReview(
       input.userColor,
       USER_DEPTH
     );
-    const topMoves = await getTopMoves(engine, fenBefore, USER_DEPTH, 3);
-    const top = topMoves[0];
-    const evalBefore = await getEvaluation(engine, fenBefore, USER_DEPTH);
-    const evalAfter = await getEvaluation(engine, fenAfter, USER_DEPTH);
-    const beforeW = evalFromResult(fenBefore, evalBefore).cpWhite;
-    const afterW = evalFromResult(fenAfter, evalAfter).cpWhite;
-    const cpLoss = mistake?.cpLoss ?? 0;
-    const playedBest = top?.move === m.uci;
+    const cpLoss = graded?.cpLoss ?? 0;
+    const playedBest = graded?.playedBest ?? false;
     const grade = gradeFromCpLoss(cpLoss, playedBest);
+    const beforeW = graded?.evalBeforeCpWhite ?? 0;
+    const afterW = graded?.evalAfterCpWhite ?? 0;
     const accuracyPct = cpLossToAccuracy(cpLoss);
 
     const position = analyzePositionForReview(
       stateBefore,
       input.userColor,
       m.uci,
-      top?.move ?? m.uci,
+      graded?.bestUci ?? m.uci,
       cpLoss,
       grade
     );
@@ -199,13 +196,13 @@ export async function buildGameReview(
       grade,
       cpLoss,
       accuracyPct,
-      bestUci: top?.move ?? m.uci,
+      bestUci: graded?.bestUci ?? m.uci,
       evalBeforeWhite: beforeW,
       evalAfterWhite: afterW,
       swingCp: cpLoss,
-      category: (mistake?.category ?? null) as MistakeCategory | null,
+      category: (graded?.category ?? null) as MistakeCategory | null,
       isCritical: cpLoss >= 100,
-      insight: insightFor(grade, cpLoss, top?.move ?? m.uci, m.uci),
+      insight: insightFor(grade, cpLoss, graded?.bestUci ?? m.uci, m.uci),
       position,
     });
     tick(`Move ${userAnalyses.length}/${userMoveIndices.length}`);

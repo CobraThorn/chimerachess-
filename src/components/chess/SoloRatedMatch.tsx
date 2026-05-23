@@ -334,6 +334,8 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         setCrsPostGame(next.crs.lastPostGame);
       }
 
+      engineRef.current?.stop();
+
       const reviewInput: GameReviewInput = {
         id: g.id,
         mode: "online",
