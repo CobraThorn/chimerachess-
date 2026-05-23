@@ -79,6 +79,9 @@ export function useOnlineClient() {
           });
           break;
         case "matched": {
+          const startedAt = Number(
+            msg.startedAt ?? msg.turnStartedAt ?? Date.now()
+          );
           const match: OnlineMatchInfo = {
             gameId: String(msg.gameId),
             tc: msg.tc as TimeControlId,
@@ -88,7 +91,8 @@ export function useOnlineClient() {
             fen: String(msg.fen),
             incrementMs: Number(msg.incrementMs ?? 0),
             clock: msg.clock as OnlineMatchInfo["clock"],
-            turnStartedAt: Number(msg.turnStartedAt ?? Date.now()),
+            startedAt,
+            turnStartedAt: Number(msg.turnStartedAt ?? startedAt),
             moveHistory: [],
           };
           matchRef.current = match;

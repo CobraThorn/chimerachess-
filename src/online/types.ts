@@ -30,6 +30,8 @@ export interface OnlineMatchInfo {
   fen: string;
   incrementMs: number;
   clock: OnlineClock;
+  /** Wall-clock when the game was paired (never updated per move). */
+  startedAt: number;
   turnStartedAt: number;
   moveHistory: OnlineMoveRecord[];
 }

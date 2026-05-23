@@ -79,12 +79,10 @@ export default function OnlineMatch({
   const { report, loading, progress, runReview, dismiss } = useGameReview();
   const reviewEngineRef = useRef<StockfishEngine | null>(null);
   const reviewStartedRef = useRef(false);
-  const matchStartedAtRef = useRef(match.turnStartedAt);
 
   useEffect(() => {
-    matchStartedAtRef.current = match.turnStartedAt;
     reviewStartedRef.current = false;
-  }, [match.gameId, match.turnStartedAt]);
+  }, [match.gameId]);
 
   useEffect(() => {
     if (client.phase !== "ended" || reviewStartedRef.current) return;
@@ -103,7 +101,7 @@ export default function OnlineMatch({
         opponentLabel: match.opponent.name,
         userColor,
         result: onlineResultToReview(client.result, userColor),
-        startedAt: matchStartedAtRef.current,
+        startedAt: match.startedAt,
         endedAt: Date.now(),
         moves: onlineMovesToRecords(history),
       });

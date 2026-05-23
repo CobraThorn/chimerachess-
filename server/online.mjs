@@ -161,6 +161,7 @@ function pairPlayers(tcId, a, b) {
     fen: game.fen,
     incrementMs: tc.incrementMs,
     clock: { ...game.clock },
+    startedAt: game.turnStartedAt,
     turnStartedAt: game.turnStartedAt,
   };
 
