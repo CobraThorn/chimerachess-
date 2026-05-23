@@ -6,6 +6,8 @@ interface EvalBarProps {
   mateIn?: number;
   label: string;
   thinking?: boolean;
+  /** Match adjacent board width, e.g. `min(calc(100vw - 3.5rem), 32rem)` */
+  boardSize?: string;
 }
 
 export default function EvalBar({
@@ -14,16 +16,17 @@ export default function EvalBar({
   mateIn,
   label,
   thinking,
+  boardSize = "min(92vw, 32rem)",
 }: EvalBarProps) {
   const pct = evalToBarPercent(cpWhite, isMate, mateIn);
   const whiteDominant = pct >= 52;
   const blackDominant = pct <= 48;
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex shrink-0 flex-col items-center gap-2">
       <div
         className="relative w-7 overflow-hidden rounded-sm border border-[rgba(255,255,255,0.08)]"
-        style={{ height: "min(92vw, 464px)", maxHeight: 464 }}
+        style={{ height: boardSize, minHeight: 260, maxHeight: "32rem" }}
       >
         <div
           className="absolute bottom-0 left-0 right-0 transition-all duration-500 ease-out"

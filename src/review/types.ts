@@ -30,6 +30,24 @@ export interface ReviewMoveAnalysis {
   insight: string;
 }
 
+/** One frame in the move-by-move recap (ply 0 = starting position). */
+export interface ReviewRecapStep {
+  ply: number;
+  fen: string;
+  moveLabel: string;
+  mover: "user" | "chimera" | null;
+  uci?: string;
+  san?: string;
+}
+
+export interface ReviewCoachNote {
+  ply: number;
+  title: string;
+  explanation: string;
+  teachingPoint: string;
+  source: "gpt" | "local";
+}
+
 export interface EvalPoint {
   ply: number;
   cpWhite: number;
@@ -67,6 +85,9 @@ export interface GameReviewReport {
   criticalMoments: ReviewMoveAnalysis[];
   narrative: string[];
   liveMistakes: MistakeRecord[];
+  recapSteps: ReviewRecapStep[];
+  moves: GameMoveRecord[];
+  coachSummary?: string;
 }
 
 export interface GameReviewInput {

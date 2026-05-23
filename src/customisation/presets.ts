@@ -46,10 +46,10 @@ function board(
     lightSquare: light,
     darkSquare: dark,
     border: accent.replace(/[\d.]+\)$/, "0.2)"),
-    selectedRing: accent.replace(/[\d.]+\)$/, "0.68)"),
-    lastMove: accent.replace(/[\d.]+\)$/, "0.14)"),
-    legalDot: accent.replace(/[\d.]+\)$/, "0.48)"),
-    legalCapture: accent.replace(/[\d.]+\)$/, "0.4)"),
+    selectedRing: accent.replace(/[\d.]+\)$/, "0.38)"),
+    lastMove: accent.replace(/[\d.]+\)$/, "0.07)"),
+    legalDot: accent.replace(/[\d.]+\)$/, "0.2)"),
+    legalCapture: accent.replace(/[\d.]+\)$/, "0.22)"),
   };
 }
 

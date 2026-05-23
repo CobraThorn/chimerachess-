@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
 import type { ReactNode } from "react";
-import { formatEvalLabel, evalToBarPercent } from "../../engine/analysis";
+import { useReviewCoach } from "../../hooks/useReviewCoach";
+import { formatEvalLabel } from "../../engine/analysis";
 import type { GameReviewReport, MoveGrade, ReviewProgress } from "../../review/types";
+import GameReviewRecap from "./GameReviewRecap";
 
 const GRADE_STYLES: Record<
   MoveGrade,
@@ -43,6 +45,8 @@ export default function GameReviewPanel({
   onClose,
   onNewGame,
 }: GameReviewPanelProps) {
+  const coach = useReviewCoach(report);
+
   if (!loading && !report) return null;
 
   const pct = progress
@@ -58,7 +62,7 @@ export default function GameReviewPanel({
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-panel relative w-full max-w-3xl rounded-sm p-6 md:p-10"
+        className="glass-panel relative w-full max-w-6xl rounded-sm p-6 md:p-10"
       >
         <span className="hud-corner hud-corner--tl" />
         <span className="hud-corner hud-corner--br" />
@@ -112,33 +116,18 @@ export default function GameReviewPanel({
               </div>
             </header>
 
-            <section className="mt-8">
-              <SectionTitle>Evaluation timeline</SectionTitle>
-              <div className="mt-3 flex h-24 items-end gap-px rounded-sm bg-[rgba(0,0,0,0.3)] p-2">
-                {report.evalTimeline.map((pt, i) => {
-                  const bar = evalToBarPercent(pt.cpWhite);
-                  return (
-                    <div
-                      key={i}
-                      className="min-w-[3px] flex-1 rounded-t-sm transition-colors"
-                      style={{
-                        height: `${bar}%`,
-                        background:
-                          bar > 55
-                            ? "rgba(255,255,255,0.55)"
-                            : bar < 45
-                              ? "rgba(80,80,90,0.7)"
-                              : "rgba(232,197,71,0.45)",
-                      }}
-                      title={`${pt.ply}: ${pt.label}`}
-                    />
-                  );
-                })}
-              </div>
-              <p className="mt-2 font-[family-name:var(--font-hud)] text-[7px] tracking-[0.15em] text-[rgba(255,255,255,0.25)]">
-                White advantage ↑ · move 0 → end
-              </p>
-            </section>
+            <div className="mt-8">
+              <GameReviewRecap
+                report={report}
+                notes={coach.notes}
+                coachSummary={coach.coachSummary}
+                prefetchDone={coach.prefetchDone}
+                prefetchTotal={coach.prefetchTotal}
+                loadingPly={coach.loadingPly}
+                gptEnabled={coach.gptEnabled}
+                onEnsureNote={coach.ensureNote}
+              />
+            </div>
 
             <section className="mt-8">
               <SectionTitle>Coach summary</SectionTitle>
@@ -206,15 +195,6 @@ export default function GameReviewPanel({
                 ))}
               </div>
             </section>
-
-            {report.openingLine && (
-              <section className="mt-8">
-                <SectionTitle>Opening</SectionTitle>
-                <p className="mt-2 font-mono text-xs leading-relaxed text-[rgba(255,255,255,0.45)]">
-                  {report.openingLine}
-                </p>
-              </section>
-            )}
 
             <div className="mt-10 flex flex-wrap gap-3 border-t border-[rgba(232,197,71,0.1)] pt-6">
               {onNewGame && (

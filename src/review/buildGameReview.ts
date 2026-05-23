@@ -8,6 +8,7 @@ import { createInitialState } from "../chess/board";
 import { toFen } from "../chess/fen";
 
 const START_FEN = toFen(createInitialState());
+import { buildRecapSteps } from "./replay";
 import type {
   EvalPoint,
   GamePhaseStats,
@@ -230,7 +231,9 @@ export async function buildGameReview(
     .map((m) => m.san ?? m.uci)
     .join(" ");
 
-  const base: Omit<GameReviewReport, "narrative"> = {
+  const recapSteps = buildRecapSteps(input.moves);
+
+  const base: Omit<GameReviewReport, "narrative" | "coachSummary"> = {
     id: input.id,
     mode: input.mode,
     opponentLabel: input.opponentLabel,
@@ -248,9 +251,14 @@ export async function buildGameReview(
     userMoves: userAnalyses,
     criticalMoments,
     liveMistakes: input.liveMistakes ?? [],
+    recapSteps,
+    moves: [...input.moves],
   };
 
-  return { ...base, narrative: buildNarrative(base) };
+  tick("Coach summary…");
+  const narrative = buildNarrative(base);
+
+  return { ...base, narrative };
 }
 
 /** Convert online move log to game move records */

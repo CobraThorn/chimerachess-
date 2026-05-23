@@ -17,15 +17,16 @@ export async function analyzeUserMove(
   fenBefore: string,
   fenAfter: string,
   playedUci: string,
-  userColor: "w" | "b"
+  userColor: "w" | "b",
+  depth = 8
 ): Promise<MistakeRecord | null> {
   const stmBefore = fenBefore.split(" ")[1];
   if (stmBefore !== userColor) return null;
 
   const [evalBefore, evalAfter, topBefore] = await Promise.all([
-    getEvaluation(engine, fenBefore, 8),
-    getEvaluation(engine, fenAfter, 8),
-    getTopMoves(engine, fenBefore, 10, 1).then((t) => t[0]),
+    getEvaluation(engine, fenBefore, depth),
+    getEvaluation(engine, fenAfter, depth),
+    getTopMoves(engine, fenBefore, Math.min(depth, 6), 1).then((t) => t[0]),
   ]);
 
   const userEvalBefore = evalBefore.cp;

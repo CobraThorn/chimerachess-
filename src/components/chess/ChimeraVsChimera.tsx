@@ -23,6 +23,7 @@ import {
   makeMove,
   resolveBotMove,
 } from "../../chess";
+import { waitAtLeast } from "../../chess/movePacing";
 import type { GameState, Move } from "../../chess";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 
@@ -125,6 +126,7 @@ export default function ChimeraVsChimera() {
     const sideMemory = mirrorMemoryForColor(mem, side);
     const archetype = getMirrorArchetype(mem, side);
     setThinking(true);
+    const thinkStart = Date.now();
     setStatusText(
       `${side === "w" ? "White" : "Black"} CHIMERA thinking…`
     );
@@ -138,6 +140,8 @@ export default function ChimeraVsChimera() {
 
       const move = resolveBotMove(current, uci);
       if (!move) return false;
+
+      await waitAtLeast(thinkStart, 280);
 
       const next = makeMove(current, move);
       if (!next) return false;

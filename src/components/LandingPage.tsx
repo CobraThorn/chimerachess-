@@ -90,7 +90,11 @@ export default function LandingPage() {
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.7, delay: i * 0.05 }}
         >
-          <div className="glass-panel relative overflow-hidden rounded-sm p-10 md:p-14">
+          <div
+            className={`glass-panel relative rounded-sm p-10 md:p-14 ${
+              section.id === "analyze" ? "overflow-visible" : "overflow-hidden"
+            }`}
+          >
             <span className="hud-corner hud-corner--tl" />
             <span className="hud-corner hud-corner--tr" />
             <span className="hud-corner hud-corner--bl" />

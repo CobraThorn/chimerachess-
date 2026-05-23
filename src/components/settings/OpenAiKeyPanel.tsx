@@ -47,7 +47,10 @@ export default function OpenAiKeyPanel() {
         </button>
       </div>
       <p className="mt-2 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.25)]">
-        Status: {hasOpenAiApiKey() ? "Connected" : "Not set — local explanations only"}
+        Status:{" "}
+        {hasOpenAiApiKey()
+          ? "Connected — game review & opening coach use GPT"
+          : "Not set — local coach notes only"}
       </p>
     </div>
   );

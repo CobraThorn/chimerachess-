@@ -41,6 +41,7 @@ import {
   toFen,
   uciToMove,
 } from "../../chess";
+import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
@@ -226,6 +227,7 @@ export default function ChimeraMatch() {
       if (!engine?.ready || current.turn !== chimeraColor) return;
 
       setChimeraThinking(true);
+      const thinkStart = Date.now();
       try {
         const uci = await getChimeraMove(engine, current, chimeraColor, memoryRef.current, {
           mirror: false,
@@ -235,6 +237,8 @@ export default function ChimeraMatch() {
 
         const move = uciToMove(current, uci);
         if (!move) return;
+
+        await waitAtLeast(thinkStart, CHIMERA_MIN_THINK_MS);
 
         const next = makeMove(current, move);
         if (!next) return;
@@ -296,33 +300,6 @@ export default function ChimeraMatch() {
         san: formatMove(state, move),
       });
 
-      if (engine?.ready) {
-        const fenAfter = toFen(next);
-        analyzeUserMove(engine, fenBefore, fenAfter, uci, userColor).then((mistake) => {
-          if (mistake && gameRef.current) {
-            gameRef.current.mistakes.push(mistake);
-            setLastInsight(
-              `CHIMERA noted your ${mistake.category}: ${mistake.played} → better ${mistake.best} (−${mistake.cpLoss}cp)`
-            );
-          }
-          setMemory((prev) => {
-            const style = prev.userStyle ?? createPlayStyleProfile();
-            const withStyle = {
-              ...prev,
-              userStyle: updateStyleFromMove(
-                style,
-                state,
-                move,
-                mistake?.cpLoss
-              ),
-            };
-            const updated = refreshUserCognitiveIdentity(withStyle);
-            saveMemory(updated);
-            return updated;
-          });
-        });
-      }
-
       const st = getGameStatus(next);
       if (st.type === "checkmate" || st.type === "stalemate" || st.type === "draw") {
         resolveGameEnd(next);
@@ -331,6 +308,35 @@ export default function ChimeraMatch() {
 
       if (next.turn === chimeraColor) {
         await runChimeraTurn(next);
+      }
+
+      if (engine?.ready) {
+        const fenAfter = toFen(next);
+        void analyzeUserMove(engine, fenBefore, fenAfter, uci, userColor, 4).then(
+          (mistake) => {
+            if (mistake && gameRef.current) {
+              gameRef.current.mistakes.push(mistake);
+              setLastInsight(
+                `CHIMERA noted your ${mistake.category}: ${mistake.played} → better ${mistake.best} (−${mistake.cpLoss}cp)`
+              );
+            }
+            setMemory((prev) => {
+              const style = prev.userStyle ?? createPlayStyleProfile();
+              const withStyle = {
+                ...prev,
+                userStyle: updateStyleFromMove(
+                  style,
+                  state,
+                  move,
+                  mistake?.cpLoss
+                ),
+              };
+              const updated = refreshUserCognitiveIdentity(withStyle);
+              saveMemory(updated);
+              return updated;
+            });
+          }
+        );
       }
     },
     [state, runChimeraTurn, resolveGameEnd, userColor, chimeraColor]

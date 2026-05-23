@@ -272,27 +272,35 @@ export default function StockfishAnalysis() {
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col items-center gap-8 lg:flex-row lg:items-start lg:justify-center">
-        <div className="flex items-stretch gap-2">
-          {analysisOn && (
-            <EvalBar
-              cpWhite={live?.cpWhite ?? 0}
-              isMate={live?.isMate}
-              mateIn={live?.mateIn}
-              label={evalLabel}
-              thinking={thinking}
-            />
-          )}
-          <div className="relative min-w-0 w-full max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
-            <ChessBoardGrid
-              state={state}
-              orientation={orientation}
-              selected={selected}
-              legalTargets={legalTargets}
-              lastMove={lastMove}
-              onSquareClick={onSquareClick}
-              engineHighlight={engineHighlight}
-            />
+      <div
+        id="analyze-review"
+        className="mx-auto grid w-full min-w-0 max-w-5xl gap-8 lg:grid-cols-[minmax(280px,400px)_minmax(260px,320px)] lg:items-start"
+      >
+        <div className="flex min-w-0 flex-col items-center gap-3 lg:sticky lg:top-24 lg:z-10 lg:self-start">
+          <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.25em] text-[rgba(255,255,255,0.35)] uppercase">
+            Analysis board · always on
+          </p>
+          <div className="flex w-full min-w-0 max-w-full items-stretch justify-center gap-2">
+            {analysisOn && (
+              <EvalBar
+                cpWhite={live?.cpWhite ?? 0}
+                isMate={live?.isMate}
+                mateIn={live?.mateIn}
+                label={evalLabel}
+                thinking={thinking}
+                boardSize="min(calc(100vw - 3.5rem), 32rem)"
+              />
+            )}
+            <div className="relative w-[min(calc(100vw-3.5rem),32rem)] min-w-[260px] shrink-0 max-lg:mx-auto">
+              <ChessBoardGrid
+                state={state}
+                orientation={orientation}
+                selected={selected}
+                legalTargets={legalTargets}
+                lastMove={lastMove}
+                onSquareClick={onSquareClick}
+                engineHighlight={engineHighlight}
+              />
             <AnimatePresence>
               {promotionPick && (
                 <motion.div
@@ -325,10 +333,11 @@ export default function StockfishAnalysis() {
                 </motion.div>
               )}
             </AnimatePresence>
+            </div>
           </div>
         </div>
 
-        <aside className="glass-panel w-full max-w-sm rounded-sm p-5 lg:sticky lg:top-28">
+        <aside className="glass-panel w-full min-w-0 rounded-sm p-5 lg:sticky lg:top-28">
           <h4 className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.35em] text-gold-glow uppercase">
             Engine readout
           </h4>

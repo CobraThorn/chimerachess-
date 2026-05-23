@@ -140,6 +140,22 @@ export function getBestMove(
   });
 }
 
+/** Fast reply for live play — caps think time (ms). */
+export function getBestMoveTimed(
+  engine: StockfishEngine,
+  fen: string,
+  movetimeMs = 220
+): Promise<string> {
+  return new Promise((resolve) => {
+    engine.send(`position fen ${fen}`);
+    engine.send(`go movetime ${Math.max(80, Math.round(movetimeMs))}`, (out) => {
+      const line = out.split("\n").find((l) => l.startsWith("bestmove"));
+      const move = line?.split(" ")[1] ?? "";
+      resolve(move === "(none)" ? "" : move);
+    });
+  });
+}
+
 export const STOCKFISH_VERSION = 18;
 
 export interface EvalResult {

@@ -1,7 +1,10 @@
+import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { useCustomisation } from "../../customisation";
 import { isLightSquare } from "../../chess";
-import type { Color, GameState, Move, Square } from "../../chess";
+import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import ChessPiece from "./ChessPiece";
+import { MOVE_SLIDE_MS } from "../../chess/movePacing";
 
 export interface ChessBoardGridProps {
   state: GameState;
@@ -11,19 +14,27 @@ export interface ChessBoardGridProps {
   lastMove?: Move | null;
   onSquareClick?: (sq: Square) => void;
   disabled?: boolean;
-  /** Highlight pieces of this color while thinking (mirror mode) */
   thinkingColor?: Color | null;
-  /** Engine best-move highlight (from → to) */
   engineHighlight?: { from: Square; to: Square } | null;
   squareSize?: "default" | "compact";
   showCorners?: boolean;
 }
 
-/** Fits board on mobile browsers (incl. Chrome) without squishing or overlapping squares. */
 const BOARD_SHELL_CLASS =
   "relative mx-auto w-full max-w-[min(100%,calc(100vw-1.25rem),32rem)]";
 const BOARD_COMPACT_CLASS =
   "relative mx-auto w-full max-w-[min(100%,calc(100vw-1.25rem),20rem)]";
+
+const LEGAL_TINT = "rgba(120,200,140,0.12)";
+const LEGAL_CAPTURE_TINT = "rgba(255,200,100,0.1)";
+
+function squarePercent(sq: Square, flip: boolean): { left: string; top: string } {
+  const f = sq & 7;
+  const r = sq >> 3;
+  const vf = flip ? 7 - f : f;
+  const vr = flip ? r : 7 - r;
+  return { left: `${vf * 12.5}%`, top: `${vr * 12.5}%` };
+}
 
 export default function ChessBoardGrid({
   state,
@@ -44,6 +55,35 @@ export default function ChessBoardGrid({
   const displayFile = (visualFile: number) => (flip ? 7 - visualFile : visualFile);
   const shellClass =
     squareSize === "compact" ? BOARD_COMPACT_CLASS : BOARD_SHELL_CLASS;
+
+  const [slide, setSlide] = useState<{
+    from: Square;
+    to: Square;
+    color: Color;
+    type: PieceType;
+    key: number;
+  } | null>(null);
+  const prevMoveKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!lastMove) return;
+    const key = `${lastMove.from}-${lastMove.to}-${lastMove.promotion ?? ""}`;
+    if (key === prevMoveKey.current) return;
+    prevMoveKey.current = key;
+
+    const landed = state.board[lastMove.to];
+    if (!landed) return;
+
+    setSlide({
+      from: lastMove.from,
+      to: lastMove.to,
+      color: landed.color,
+      type: landed.type,
+      key: Date.now(),
+    });
+    const t = setTimeout(() => setSlide(null), MOVE_SLIDE_MS + 40);
+    return () => clearTimeout(t);
+  }, [lastMove, state.board]);
 
   return (
     <div
@@ -82,6 +122,14 @@ export default function ChessBoardGrid({
               state.turn === thinkingColor;
             const isEngineFrom = engineHighlight?.from === sq;
             const isEngineTo = engineHighlight?.to === sq;
+            const hidePiece =
+              slide && (sq === slide.from || sq === slide.to);
+
+            const bg = isLast
+              ? boardTheme.lastMove
+              : isLight
+                ? boardTheme.lightSquare
+                : boardTheme.darkSquare;
 
             return (
               <button
@@ -90,28 +138,31 @@ export default function ChessBoardGrid({
                 disabled={disabled || !onSquareClick}
                 onClick={() => onSquareClick?.(sq)}
                 className={[
-                  "@container relative flex size-full min-h-0 min-w-0 touch-manipulation items-center justify-center p-0 transition-colors duration-200",
+                  "@container relative flex size-full min-h-0 min-w-0 touch-manipulation items-center justify-center p-0",
+                  "transition-[background-color,box-shadow] duration-300 ease-out",
                   disabled && "opacity-90",
                   isThinking && "ring-1 ring-inset",
                 ]
                   .filter(Boolean)
                   .join(" ")}
                 style={{
-                  backgroundColor: isLast
-                    ? boardTheme.lastMove
-                    : isLight
-                      ? boardTheme.lightSquare
-                      : boardTheme.darkSquare,
+                  backgroundColor: bg,
                   boxShadow: [
                     isSelected
                       ? `inset 0 0 0 2px ${boardTheme.selectedRing}`
                       : "",
-                    isThinking ? "inset 0 0 0 1px rgba(0,229,255,0.35)" : "",
+                    isThinking ? "inset 0 0 0 1px rgba(0,229,255,0.25)" : "",
+                    isLegal && !piece
+                      ? `inset 0 0 0 999px ${LEGAL_TINT}`
+                      : "",
+                    isLegal && isCapture
+                      ? `inset 0 0 0 999px ${LEGAL_CAPTURE_TINT}`
+                      : "",
                     isEngineFrom
-                      ? "inset 0 0 0 999px rgba(255,200,60,0.22)"
+                      ? "inset 0 0 0 999px rgba(255,200,60,0.12)"
                       : "",
                     isEngineTo
-                      ? "inset 0 0 0 999px rgba(0,229,255,0.28)"
+                      ? "inset 0 0 0 999px rgba(0,229,255,0.14)"
                       : "",
                   ]
                     .filter(Boolean)
@@ -120,30 +171,60 @@ export default function ChessBoardGrid({
               >
                 {isLegal && !piece && (
                   <span
-                    className="h-[22%] w-[22%] min-h-2 min-w-2 max-h-3 max-w-3 rounded-full"
+                    className="h-[18%] w-[18%] min-h-1.5 min-w-1.5 max-h-2.5 max-w-2.5 rounded-full opacity-80"
                     style={{
                       backgroundColor: boardTheme.legalDot,
-                      boxShadow: `0 0 8px ${boardTheme.legalDot}`,
+                      boxShadow: `0 0 4px ${boardTheme.legalDot}`,
                     }}
                   />
                 )}
                 {isLegal && isCapture && (
                   <span
-                    className="absolute inset-[12%] rounded-full border-2 box-border"
+                    className="absolute inset-[14%] rounded-full border box-border opacity-70"
                     style={{ borderColor: boardTheme.legalCapture }}
                   />
                 )}
-                {piece && (
-                  <ChessPiece
-                    color={piece.color}
-                    type={piece.type}
-                    pieceSet={pieceSet}
-                  />
+                {piece && !hidePiece && (
+                  <motion.div
+                    layout
+                    className="flex h-[88%] w-[88%] items-center justify-center will-change-transform"
+                    transition={{
+                      type: "spring",
+                      stiffness: 520,
+                      damping: 38,
+                      mass: 0.55,
+                    }}
+                  >
+                    <ChessPiece
+                      color={piece.color}
+                      type={piece.type}
+                      pieceSet={pieceSet}
+                    />
+                  </motion.div>
                 )}
               </button>
             );
           })}
         </div>
+
+        {slide && (
+          <motion.div
+            key={slide.key}
+            className="pointer-events-none absolute z-20 flex h-[12.5%] w-[12.5%] items-center justify-center will-change-transform"
+            initial={squarePercent(slide.from, flip)}
+            animate={squarePercent(slide.to, flip)}
+            transition={{
+              duration: MOVE_SLIDE_MS / 1000,
+              ease: [0.22, 0.03, 0.26, 1],
+            }}
+          >
+            <ChessPiece
+              color={slide.color}
+              type={slide.type}
+              pieceSet={pieceSet}
+            />
+          </motion.div>
+        )}
       </div>
     </div>
   );
