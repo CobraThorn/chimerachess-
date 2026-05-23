@@ -1,12 +1,14 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { logDataEvent } from "../../account/events";
+import { waitForPendingMistakeAnalyses } from "../../ai/mistakeAnalyzer";
 import {
   analyzeUserMove,
   createPlayStyleProfile,
   finishGame,
   getChimeraMove,
   getTopPatterns,
+  chimeraStrengthLabel,
   loadMemory,
   saveMemory,
   createPersonaPlayStyle,
@@ -24,6 +26,7 @@ import {
   INITIAL_CHIMERA_ELO,
 } from "../../ai/types";
 import ChimeraMemoryRadar from "./ChimeraMemoryRadar";
+import ChimeraLearningPanel from "./ChimeraLearningPanel";
 import ChessBoardGrid from "./ChessBoardGrid";
 import ChessPiece from "./ChessPiece";
 import CognitiveArchetypePanel from "./CognitiveArchetypePanel";
@@ -84,6 +87,7 @@ export default function ChimeraMatch() {
     mistakes: MistakeRecord[];
     startedAt: number;
   } | null>(null);
+  const pendingMistakeAnalysesRef = useRef(0);
 
   const status = useMemo(() => getGameStatus(state), [state]);
   const topPatterns = useMemo(() => getTopPatterns(memory, 4), [memory]);
@@ -181,41 +185,49 @@ export default function ChimeraMatch() {
   const persistFinishedGame = useCallback((result: StoredGame["result"]) => {
     const g = gameRef.current;
     if (!g) return;
-    const stored: StoredGame = {
-      id: g.id,
-      startedAt: g.startedAt,
-      endedAt: Date.now(),
-      userColor,
-      moves: g.moves,
-      mistakes: g.mistakes,
-      result,
-      openingLine: g.moves
-        .slice(0, 6)
-        .map((m) => m.uci)
-        .join(" "),
-    };
-    setMemory((prev) => {
-      const next = finishGame(prev, stored);
-      saveMemory(next);
-      return next;
-    });
-    logDataEvent("game_complete", {
-      result,
-      moves: stored.moves.length,
-      mistakes: stored.mistakes.length,
-    });
-    setReviewInput({
-      id: stored.id,
-      mode: "chimera",
-      opponentLabel: "CHIMERA",
-      userColor,
-      result: stored.result,
-      startedAt: stored.startedAt,
-      endedAt: stored.endedAt,
-      moves: [...stored.moves],
-      liveMistakes: [...stored.mistakes],
-    });
-    gameRef.current = null;
+    void (async () => {
+      await waitForPendingMistakeAnalyses(
+        () => pendingMistakeAnalysesRef.current
+      );
+      const stored: StoredGame = {
+        id: g.id,
+        startedAt: g.startedAt,
+        endedAt: Date.now(),
+        userColor,
+        moves: g.moves,
+        mistakes: g.mistakes,
+        result,
+        openingLine: g.moves
+          .slice(0, 6)
+          .map((m) => m.uci)
+          .join(" "),
+      };
+      setMemory((prev) => {
+        const next = finishGame(prev, stored);
+        saveMemory(next);
+        if (next.learning?.lastLesson) {
+          setLastInsight(`CHIMERA learned: ${next.learning.lastLesson}`);
+        }
+        return next;
+      });
+      logDataEvent("game_complete", {
+        result,
+        moves: stored.moves.length,
+        mistakes: stored.mistakes.length,
+      });
+      setReviewInput({
+        id: stored.id,
+        mode: "chimera",
+        opponentLabel: "CHIMERA",
+        userColor,
+        result: stored.result,
+        startedAt: stored.startedAt,
+        endedAt: stored.endedAt,
+        moves: [...stored.moves],
+        liveMistakes: [...stored.mistakes],
+      });
+      gameRef.current = null;
+    })();
   }, [userColor]);
 
   const resolveGameEnd = useCallback(
@@ -320,7 +332,52 @@ export default function ChimeraMatch() {
       });
 
       const st = getGameStatus(next);
-      if (st.type === "checkmate" || st.type === "stalemate" || st.type === "draw") {
+      const isTerminal =
+        st.type === "checkmate" ||
+        st.type === "stalemate" ||
+        st.type === "draw";
+
+      const recordAnalysis = async () => {
+        if (!engine?.ready) return;
+        const fenAfter = toFen(next);
+        pendingMistakeAnalysesRef.current += 1;
+        try {
+          const mistake = await analyzeUserMove(
+            engine,
+            fenBefore,
+            fenAfter,
+            uci,
+            userColor,
+            4
+          );
+          if (mistake && gameRef.current) {
+            gameRef.current.mistakes.push(mistake);
+            setLastInsight(
+              `CHIMERA noted your ${mistake.category}: ${mistake.played} → better ${mistake.best} (${missSizeWord(mistake.cpLoss)})`
+            );
+          }
+          setMemory((prev) => {
+            const style = prev.userStyle ?? createPlayStyleProfile();
+            const withStyle = {
+              ...prev,
+              userStyle: updateStyleFromMove(
+                style,
+                state,
+                move,
+                mistake?.cpLoss
+              ),
+            };
+            const updated = refreshUserCognitiveIdentity(withStyle);
+            saveMemory(updated);
+            return updated;
+          });
+        } finally {
+          pendingMistakeAnalysesRef.current -= 1;
+        }
+      };
+
+      if (isTerminal) {
+        await recordAnalysis();
         resolveGameEnd(next);
         return;
       }
@@ -329,34 +386,7 @@ export default function ChimeraMatch() {
         await runChimeraTurn(next);
       }
 
-      if (engine?.ready) {
-        const fenAfter = toFen(next);
-        void analyzeUserMove(engine, fenBefore, fenAfter, uci, userColor, 4).then(
-          (mistake) => {
-            if (mistake && gameRef.current) {
-              gameRef.current.mistakes.push(mistake);
-              setLastInsight(
-                `CHIMERA noted your ${mistake.category}: ${mistake.played} → better ${mistake.best} (${missSizeWord(mistake.cpLoss)})`
-              );
-            }
-            setMemory((prev) => {
-              const style = prev.userStyle ?? createPlayStyleProfile();
-              const withStyle = {
-                ...prev,
-                userStyle: updateStyleFromMove(
-                  style,
-                  state,
-                  move,
-                  mistake?.cpLoss
-                ),
-              };
-              const updated = refreshUserCognitiveIdentity(withStyle);
-              saveMemory(updated);
-              return updated;
-            });
-          }
-        );
-      }
+      void recordAnalysis();
     },
     [state, runChimeraTurn, resolveGameEnd, userColor, chimeraColor]
   );
@@ -475,6 +505,9 @@ export default function ChimeraMatch() {
                     {chimeraSub ? ` · ${chimeraSub.label}` : ""}
                   </p>
                 )}
+                <p className="max-w-[140px] text-center font-[family-name:var(--font-hud)] text-[6px] tracking-[0.1em] text-[rgba(0,229,255,0.4)]">
+                  {chimeraStrengthLabel(memory)}
+                </p>
               </div>
             </div>
             <div>
@@ -606,6 +639,10 @@ export default function ChimeraMatch() {
             </>
           )}
         </p>
+
+        <div className="mt-6 border-t border-[rgba(232,197,71,0.08)] pt-5">
+          <ChimeraLearningPanel memory={memory} />
+        </div>
 
         <div className="mt-6 border-t border-[rgba(232,197,71,0.08)] pt-5">
           <CognitiveArchetypePanel memory={memory} />

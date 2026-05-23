@@ -1,4 +1,5 @@
 import type { DataConsents, UserAccount } from "../account/types";
+import type { ChimeraSaveBundle } from "../chimeraSetup/types";
 import { resolveApiBase } from "../config/productionApi";
 
 export interface RemoteAccount {
@@ -9,6 +10,7 @@ export interface RemoteAccount {
   createdAt: number;
   lastLoginAt: number;
   consents: DataConsents;
+  chimeraSetupComplete?: boolean;
 }
 
 function loginEndpoint(): string {
@@ -26,10 +28,15 @@ async function parseBody<T>(res: Response): Promise<T | null> {
   }
 }
 
+export interface LoginLookupResult {
+  account: RemoteAccount;
+  save: ChimeraSaveBundle | null;
+}
+
 /** Look up account on the server by email (for sign-in on a new device). */
 export async function fetchAccountByEmail(
   email: string
-): Promise<RemoteAccount | null> {
+): Promise<LoginLookupResult | null> {
   try {
     const res = await fetch(loginEndpoint(), {
       method: "POST",
@@ -39,9 +46,10 @@ export async function fetchAccountByEmail(
     const data = await parseBody<{
       ok?: boolean;
       account?: RemoteAccount;
+      save?: ChimeraSaveBundle;
     }>(res);
     if (!res.ok || !data?.ok || !data.account?.id) return null;
-    return data.account;
+    return { account: data.account, save: data.save ?? null };
   } catch {
     return null;
   }
@@ -64,5 +72,6 @@ export function remoteToUserAccount(
       cognitiveResearch: false,
     },
     isLoggedIn: loggedIn,
+    chimeraSetupComplete: remote.chimeraSetupComplete === true,
   };
 }

@@ -17,6 +17,8 @@ export interface UserAccount {
   consents: DataConsents;
   /** Local session — no server auth yet */
   isLoggedIn: boolean;
+  /** Finished "Customise your CHIMERA" onboarding */
+  chimeraSetupComplete?: boolean;
 }
 
 export type DataEventType =

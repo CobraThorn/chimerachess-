@@ -96,6 +96,7 @@ function accountPayload(account: UserAccount) {
     createdAt: account.createdAt,
     lastLoginAt: account.lastLoginAt,
     consents: account.consents,
+    chimeraSetupComplete: account.chimeraSetupComplete === true,
   };
 }
 

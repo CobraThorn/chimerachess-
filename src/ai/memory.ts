@@ -13,7 +13,10 @@ import {
   ensureCrsState,
 } from "../crs/profile";
 import { clampElo, calculateEloChange, resultToScore } from "./elo";
+import { learnFromGame, ensureLearning } from "./learning/learn";
+import { applyOpponentPhenotype, ensureOpponentPhenotype } from "./learning/phenotype";
 import { createPlayStyleProfile } from "./playStyle";
+import type { CrsMode } from "../crs/types";
 import type { ChimeraMemory, StoredGame, UserPattern } from "./types";
 import {
   CHIMERA_MEMORY_EVENT,
@@ -37,7 +40,7 @@ function migrateLegacyChimeraElo(memory: ChimeraMemory): ChimeraMemory {
 }
 
 export function createEmptyMemory(): ChimeraMemory {
-  return {
+  const base: ChimeraMemory = {
     version: 1,
     games: [],
     patterns: [],
@@ -53,10 +56,10 @@ export function createEmptyMemory(): ChimeraMemory {
     mirrorStats: { total: 0, whiteWins: 0, blackWins: 0, draws: 0 },
     userStyle: createPlayStyleProfile(INITIAL_USER_ELO),
     crs: createInitialCrsState(INITIAL_USER_ELO),
-    chimeraOpponent: createPersonaPlayStyle("opponent"),
     chimera1: createPersonaPlayStyle("mirror-white"),
     chimera2: createPersonaPlayStyle("mirror-black"),
   };
+  return ensureOpponentPhenotype(base);
 }
 
 export function createEmptyMemorySeeded(): ChimeraMemory {
@@ -108,9 +111,16 @@ export function loadMemory(): ChimeraMemory {
         elo: migrated.crs.chimeraRating,
       };
     }
+    if (!migrated.learning) {
+      migrated.learning = ensureLearning(migrated);
+      migrated.adaptation = migrated.learning.adaptationScore;
+    } else {
+      migrated.adaptation = migrated.learning.adaptationScore;
+    }
+    const withPhenotype = ensureOpponentPhenotype(migrated);
     return ensureDistinctChimeraPersonalities(
       refreshOpponentCognitiveIdentity(
-        refreshMirrorCognitiveIdentities(migrated)
+        refreshMirrorCognitiveIdentities(withPhenotype)
       )
     );
   } catch {
@@ -164,7 +174,8 @@ export function upsertPattern(
 
 export function finishGame(
   memory: ChimeraMemory,
-  game: StoredGame
+  game: StoredGame,
+  crsOptions?: { mode?: CrsMode; opponentRating?: number }
 ): ChimeraMemory {
   const games = [...memory.games, game];
   let patterns = [...memory.patterns];
@@ -181,10 +192,8 @@ export function finishGame(
   patterns.sort((a, b) => b.occurrences - a.occurrences);
   if (patterns.length > 200) patterns = patterns.slice(0, 200);
 
-  const adaptation = Math.min(
-    100,
-    memory.adaptation + 4 + game.mistakes.length * 2
-  );
+  const learning = learnFromGame(memory, game, patterns);
+  const adaptation = learning.adaptationScore;
 
   let userStyle = memory.userStyle ?? createPlayStyleProfile(INITIAL_USER_ELO);
   const chimeraEloBefore = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
@@ -204,25 +213,41 @@ export function finishGame(
   else if (game.result === "chimera-win") stats.chimeraWins += 1;
   else stats.draws += 1;
 
-  const withElo = refreshOpponentCognitiveIdentity(refreshUserCognitiveIdentity({
-    version: 1,
-    games,
-    patterns,
-    stats,
-    adaptation,
-    chimeraElo,
-    userStyle,
-    chimera1: memory.chimera1,
-    chimera2: memory.chimera2,
-    mirrorStats: memory.mirrorStats,
-    cognitiveIdentity: memory.cognitiveIdentity,
-    lastChimeraEloChange: chimeraDelta,
-    chimeraOpponent: memory.chimeraOpponent,
-    chimeraOpponentIdentity: memory.chimeraOpponentIdentity,
-    crs: memory.crs ?? ensureCrsState(memory),
-  }));
+  let withElo = refreshOpponentCognitiveIdentity(
+    refreshUserCognitiveIdentity({
+      version: 1,
+      games,
+      patterns,
+      stats,
+      adaptation,
+      chimeraElo,
+      userStyle,
+      chimera1: memory.chimera1,
+      chimera2: memory.chimera2,
+      mirrorStats: memory.mirrorStats,
+      cognitiveIdentity: memory.cognitiveIdentity,
+      lastChimeraEloChange: chimeraDelta,
+      chimeraOpponent: memory.chimeraOpponent,
+      chimeraOpponentIdentity: memory.chimeraOpponentIdentity,
+      crs: memory.crs ?? ensureCrsState(memory),
+      learning,
+    })
+  );
 
-  return applyCrsForStoredGame(withElo, game, "chimera");
+  if (learning.phenotype) {
+    const prevPid = memory.learning?.phenotype?.personalityId;
+    const nextPid = learning.phenotype.personalityId;
+    if (nextPid && nextPid !== prevPid) {
+      withElo = applyOpponentPhenotype(withElo, learning.phenotype);
+    }
+  }
+
+  return applyCrsForStoredGame(
+    withElo,
+    game,
+    crsOptions?.mode ?? "chimera",
+    crsOptions?.opponentRating
+  );
 }
 
 export function getTopPatterns(memory: ChimeraMemory, n = 5): UserPattern[] {

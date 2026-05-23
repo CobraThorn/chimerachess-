@@ -7,4 +7,5 @@ export * from "./memoryRadar";
 export * from "./mirrorMemory";
 export * from "./playStyle";
 export * from "./elo";
+export * from "./learning";
 export * from "./cognition";

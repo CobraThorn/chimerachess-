@@ -1,12 +1,18 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  analyzeUserMove,
+  createPlayStyleProfile,
+  finishGame,
   getChimeraMove,
   loadMemory,
+  refreshUserCognitiveIdentity,
   saveMemory,
+  updateStyleFromMove,
 } from "../../ai";
+import { waitForPendingMistakeAnalyses } from "../../ai/mistakeAnalyzer";
 import { INITIAL_CHIMERA_ELO } from "../../ai/types";
-import type { GameMoveRecord, StoredGame } from "../../ai/types";
+import type { GameMoveRecord, MistakeRecord, StoredGame } from "../../ai/types";
 import {
   createInitialState,
   formatMove,
@@ -22,7 +28,6 @@ import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
 import { useCustomisation } from "../../customisation";
 import {
-  applyCrsForStoredGame,
   clearCrsPostGame,
   ensureCrsState,
   tcToCrsMode,
@@ -129,9 +134,11 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     id: string;
     startedAt: number;
     moves: GameMoveRecord[];
+    mistakes: MistakeRecord[];
   } | null>(null);
   const endedRef = useRef(false);
   const reviewStartedRef = useRef(false);
+  const pendingMistakeAnalysesRef = useRef(0);
 
   const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
   const memory = loadMemory();
@@ -176,6 +183,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
       id: `solo-${Date.now()}`,
       startedAt: Date.now(),
       moves: [],
+      mistakes: [],
     };
     endedRef.current = false;
     reviewStartedRef.current = false;
@@ -291,51 +299,63 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     if (!g || g.moves.length < 1 || !result) return;
     reviewStartedRef.current = true;
 
-    const stored: StoredGame = {
-      id: g.id,
-      startedAt: g.startedAt,
-      endedAt: Date.now(),
-      userColor,
-      moves: g.moves,
-      mistakes: [],
-      result: reviewResult(result, userColor),
-      openingLine: g.moves
-        .slice(0, 6)
-        .map((m) => m.san ?? m.uci)
-        .join(" "),
-    };
-
-    const mem = loadMemory();
-    const mode = tcToCrsMode(tc);
-    const next = applyCrsForStoredGame(mem, stored, mode, chimeraElo);
-    saveMemory(next);
-    if (next.crs?.lastPostGame) {
-      setCrsPostGame(next.crs.lastPostGame);
-    }
-
-    const reviewInput: GameReviewInput = {
-      id: g.id,
-      mode: "online",
-      opponentLabel: BOT_NAME,
-      userColor,
-      result: reviewResult(result, userColor),
-      startedAt: g.startedAt,
-      endedAt: Date.now(),
-      moves: g.moves,
-    };
-
-    const engine = createStockfishEngine();
+    const reviewEngine = createStockfishEngine();
     let cancelled = false;
-    const timer = setInterval(() => {
-      if (cancelled || !engine.ready) return;
-      clearInterval(timer);
-      void runReview(engine, reviewInput);
-    }, 120);
+    let reviewTimer: ReturnType<typeof setInterval> | undefined;
+
+    void (async () => {
+      await waitForPendingMistakeAnalyses(
+        () => pendingMistakeAnalysesRef.current
+      );
+      if (cancelled) return;
+
+      const stored: StoredGame = {
+        id: g.id,
+        startedAt: g.startedAt,
+        endedAt: Date.now(),
+        userColor,
+        moves: g.moves,
+        mistakes: g.mistakes,
+        result: reviewResult(result, userColor),
+        openingLine: g.moves
+          .slice(0, 6)
+          .map((m) => m.san ?? m.uci)
+          .join(" "),
+      };
+
+      const mem = loadMemory();
+      const mode = tcToCrsMode(tc);
+      const next = finishGame(mem, stored, {
+        mode,
+        opponentRating: chimeraElo,
+      });
+      saveMemory(next);
+      if (next.crs?.lastPostGame) {
+        setCrsPostGame(next.crs.lastPostGame);
+      }
+
+      const reviewInput: GameReviewInput = {
+        id: g.id,
+        mode: "online",
+        opponentLabel: BOT_NAME,
+        userColor,
+        result: reviewResult(result, userColor),
+        startedAt: g.startedAt,
+        endedAt: Date.now(),
+        moves: g.moves,
+      };
+
+      reviewTimer = setInterval(() => {
+        if (cancelled || !reviewEngine.ready) return;
+        if (reviewTimer) clearInterval(reviewTimer);
+        void runReview(reviewEngine, reviewInput);
+      }, 120);
+    })();
 
     return () => {
       cancelled = true;
-      clearInterval(timer);
-      engine.quit();
+      if (reviewTimer) clearInterval(reviewTimer);
+      reviewEngine.quit();
     };
   }, [phase, result, userColor, tc, chimeraElo, runReview]);
 
@@ -343,6 +363,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     (move: Move) => {
       if (phase !== "playing" || !userTurn || botThinking) return;
 
+      const fenBefore = toFen(state);
       const { clock: afterFlag, flagged } = applyMoveClock(
         clock,
         userColor,
@@ -371,6 +392,35 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         finish(userColor === "w" ? "white-win" : "black-win", "checkmate");
       } else if (st.type === "stalemate" || st.type === "draw") {
         finish("draw", st.type);
+      }
+
+      const engine = engineRef.current;
+      if (engine?.ready) {
+        const uci = moveToUci(move);
+        const fenAfter = toFen(next);
+        const before = state;
+        pendingMistakeAnalysesRef.current += 1;
+        void analyzeUserMove(engine, fenBefore, fenAfter, uci, userColor, 4)
+          .then((mistake) => {
+            if (mistake && gameRef.current) {
+              gameRef.current.mistakes.push(mistake);
+            }
+            const mem = loadMemory();
+            const style = mem.userStyle ?? createPlayStyleProfile();
+            const withStyle = {
+              ...mem,
+              userStyle: updateStyleFromMove(
+                style,
+                before,
+                move,
+                mistake?.cpLoss
+              ),
+            };
+            saveMemory(refreshUserCognitiveIdentity(withStyle));
+          })
+          .finally(() => {
+            pendingMistakeAnalysesRef.current -= 1;
+          });
       }
     },
     [

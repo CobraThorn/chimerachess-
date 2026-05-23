@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -9,6 +10,7 @@ import {
 import { resolveCustomisation } from "./storage";
 import { loadCustomisation, saveCustomisation } from "./storage";
 import type { BoardTheme, CustomisationPrefs, PieceSet } from "./types";
+import { CHIMERA_SETUP_EVENT } from "../chimeraSetup";
 
 interface CustomisationContextValue {
   prefs: CustomisationPrefs;
@@ -26,6 +28,12 @@ export function CustomisationProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<CustomisationPrefs>(() =>
     loadCustomisation()
   );
+
+  useEffect(() => {
+    const reload = () => setPrefs(loadCustomisation());
+    window.addEventListener(CHIMERA_SETUP_EVENT, reload);
+    return () => window.removeEventListener(CHIMERA_SETUP_EVENT, reload);
+  }, []);
 
   const { boardTheme, pieceSet } = useMemo(
     () => resolveCustomisation(prefs),

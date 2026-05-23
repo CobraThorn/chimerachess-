@@ -1,4 +1,6 @@
 import { motion } from "framer-motion";
+import { isLoggedIn } from "../../account/storage";
+import { CHIMERA_OPEN_SETUP_EVENT } from "../../chimeraSetup";
 import AccountDataSection from "../account/AccountDataSection";
 import CustomisationPanel from "../customisation/CustomisationPanel";
 import OpenAiKeyPanel from "./OpenAiKeyPanel";
@@ -31,6 +33,15 @@ export default function SettingsSection() {
         </p>
 
         <AccountDataSection />
+        {isLoggedIn() && (
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(CHIMERA_OPEN_SETUP_EVENT))}
+            className="mt-8 w-full rounded-sm border border-[rgba(0,229,255,0.25)] bg-[rgba(0,229,255,0.06)] px-4 py-3 font-[family-name:var(--font-hud)] text-[9px] tracking-[0.25em] text-[rgba(0,229,255,0.85)]"
+          >
+            Customise your CHIMERA again
+          </button>
+        )}
         <CustomisationPanel />
         <OpenAiKeyPanel />
       </div>

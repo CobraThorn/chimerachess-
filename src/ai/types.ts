@@ -2,6 +2,7 @@ import type { Color } from "../chess";
 import type { ChimeraRatingState } from "../crs/types";
 import type { CognitiveIdentity } from "./cognition/identity";
 import type { PlayStyleProfile } from "./playStyle";
+import type { AdaptiveLearningState } from "./learning/types";
 
 export interface GameMoveRecord {
   uci: string;
@@ -90,6 +91,8 @@ export interface ChimeraMemory {
   lastChimeraEloChange?: number;
   /** Chimera Rating System — skill, modes, history, hidden confidence */
   crs?: ChimeraRatingState;
+  /** Custom adaptive learning model — habits, counters, lessons */
+  learning?: AdaptiveLearningState;
 }
 
 export const INITIAL_USER_ELO = 100;

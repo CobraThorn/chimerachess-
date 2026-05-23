@@ -12,6 +12,7 @@ import {
 import type { ArchetypeInfluence } from "./classifier";
 import type { ChimeraMemory } from "../types";
 import type { PlayStyleProfile } from "../playStyle";
+import { buildIdentityFromPhenotype } from "../learning/phenotype";
 
 const BLEND = 0.38;
 
@@ -191,6 +192,16 @@ export function refreshOpponentCognitiveIdentity(
   const profile = memory.chimeraOpponent;
   if (!profile) {
     return memory;
+  }
+  const phenotype = memory.learning?.phenotype;
+  if (phenotype) {
+    return {
+      ...memory,
+      chimeraOpponentIdentity: buildIdentityFromPhenotype(
+        phenotype,
+        memory.chimeraOpponentIdentity
+      ),
+    };
   }
   return {
     ...memory,

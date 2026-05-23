@@ -50,3 +50,15 @@ export async function analyzeUserMove(
     at: Date.now(),
   };
 }
+
+/** Let game-end persistence wait for in-flight per-move analyses */
+export async function waitForPendingMistakeAnalyses(
+  getPendingCount: () => number,
+  maxWaitMs = 2800,
+  pollMs = 40
+): Promise<void> {
+  const deadline = Date.now() + maxWaitMs;
+  while (getPendingCount() > 0 && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}

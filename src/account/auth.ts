@@ -1,5 +1,8 @@
 import { fetchAccountByEmail, remoteToUserAccount } from "../api/accountApi";
 import { scheduleSync } from "../api/chimeraBackend";
+import { fetchUserBackup } from "../api/saveBackup";
+import { restoreSaveForAccount } from "../chimeraSetup/backup";
+import type { ChimeraSaveBundle } from "../chimeraSetup/types";
 import { isValidEmail, normalizeEmail } from "./validation";
 import {
   loadAccount,
@@ -20,6 +23,14 @@ function activeSession(account: UserAccount): UserAccount {
   };
 }
 
+async function restoreCloudSave(
+  accountId: string,
+  bundleFromLogin?: ChimeraSaveBundle | null
+): Promise<void> {
+  const bundle = bundleFromLogin ?? (await fetchUserBackup(accountId));
+  restoreSaveForAccount(accountId, bundle);
+}
+
 /**
  * Sign in: this device first, then cloud (same email on phone / new browser).
  */
@@ -33,6 +44,7 @@ export async function loginByEmail(email: string): Promise<AuthResult> {
   if (local && normalizeEmail(local.email) === norm) {
     const account = activeSession(local);
     saveAccount(account);
+    await restoreCloudSave(account.id);
     scheduleSync(800);
     return {
       ok: true,
@@ -49,10 +61,11 @@ export async function loginByEmail(email: string): Promise<AuthResult> {
     };
   }
 
-  const remote = await fetchAccountByEmail(norm);
-  if (remote) {
-    const account = activeSession(remoteToUserAccount(remote));
+  const lookup = await fetchAccountByEmail(norm);
+  if (lookup) {
+    const account = activeSession(remoteToUserAccount(lookup.account));
     saveAccount(account);
+    await restoreCloudSave(account.id, lookup.save);
     scheduleSync(800);
     return {
       ok: true,
@@ -88,15 +101,17 @@ export async function registerUser(input: {
     };
   }
 
-  const remote = await fetchAccountByEmail(norm);
-  if (remote) {
+  const lookup = await fetchAccountByEmail(norm);
+  if (lookup) {
     const account = activeSession({
-      ...remoteToUserAccount(remote),
+      ...remoteToUserAccount(lookup.account),
       phone: input.phone,
-      displayName: input.displayName.trim() || remote.displayName || "Player",
+      displayName:
+        input.displayName.trim() || lookup.account.displayName || "Player",
       consents: input.consents,
     });
     saveAccount(account);
+    await restoreCloudSave(account.id, lookup.save);
     scheduleSync(800);
     return {
       ok: true,
@@ -114,6 +129,7 @@ export async function registerUser(input: {
       consents: input.consents,
     });
     saveAccount(account);
+    await restoreCloudSave(account.id);
     scheduleSync(800);
     return {
       ok: true,
@@ -139,7 +155,7 @@ export async function registerUser(input: {
   return {
     ok: true,
     account,
-    message: "Account created — you're signed in.",
+    message: "Account created — customise your CHIMERA next.",
   };
 }
 

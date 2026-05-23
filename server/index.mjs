@@ -20,10 +20,12 @@ const DATA_DIR =
 const CORS_ORIGIN = process.env.CHIMERA_CORS_ORIGIN?.trim() || "*";
 const ACCOUNTS_DIR = path.join(DATA_DIR, "accounts");
 const EVENTS_DIR = path.join(DATA_DIR, "events");
+const BACKUPS_DIR = path.join(DATA_DIR, "backups");
 
 async function ensureDirs() {
   await fs.mkdir(ACCOUNTS_DIR, { recursive: true });
   await fs.mkdir(EVENTS_DIR, { recursive: true });
+  await fs.mkdir(BACKUPS_DIR, { recursive: true });
 }
 
 async function readBody(req) {
@@ -141,7 +143,29 @@ function publicAccountPayload(record) {
       marketing: false,
       cognitiveResearch: false,
     },
+    chimeraSetupComplete: record.chimeraSetupComplete === true,
   };
+}
+
+async function loadUserBackup(accountId) {
+  if (!accountId) return null;
+  const file = path.join(BACKUPS_DIR, `${accountId}.json`);
+  try {
+    return JSON.parse(await fs.readFile(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function saveUserBackup(accountId, save) {
+  if (!accountId || !save) {
+    throw new Error("accountId and save required");
+  }
+  const file = path.join(BACKUPS_DIR, `${accountId}.json`);
+  await fs.writeFile(
+    file,
+    JSON.stringify({ savedAt: Date.now(), ...save }, null, 2)
+  );
 }
 
 const server = http.createServer(async (req, res) => {
@@ -189,10 +213,52 @@ const server = http.createServer(async (req, res) => {
         send(res, 404, { ok: false, error: "Account not found" });
         return;
       }
+      const save = await loadUserBackup(found.id);
       send(res, 200, {
         ok: true,
         account: publicAccountPayload(found),
+        save,
       });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/chimera/backup") {
+      await ensureDirs();
+      const accountId = url.searchParams.get("accountId");
+      if (!accountId) {
+        send(res, 400, { ok: false, error: "accountId required" });
+        return;
+      }
+      const save = await loadUserBackup(accountId);
+      send(res, 200, { ok: true, save });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/chimera/backup") {
+      await ensureDirs();
+      const body = await readBody(req);
+      const accountId = body.accountId;
+      const save = body.save;
+      if (!accountId || !save) {
+        send(res, 400, { ok: false, error: "accountId and save required" });
+        return;
+      }
+      await saveUserBackup(accountId, save);
+      if (body.account) {
+        await saveAccount({
+          ...body.account,
+          chimeraSetupComplete: true,
+        });
+      } else {
+        const existing = await findAccountByEmail(body.email ?? "");
+        if (existing) {
+          await saveAccount({
+            ...existing,
+            chimeraSetupComplete: true,
+          });
+        }
+      }
+      send(res, 200, { ok: true, savedAt: Date.now() });
       return;
     }
 

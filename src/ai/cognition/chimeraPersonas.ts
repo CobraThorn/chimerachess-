@@ -3,6 +3,7 @@ import { getPrimaryDef, getSubdivisionDef, PRIMARY_ARCHETYPES } from "./archetyp
 import type { CognitiveIdentity } from "./identity";
 import type { ChimeraMemory } from "../types";
 import { INITIAL_CHIMERA_ELO } from "../types";
+import { applyOpponentPhenotype } from "../learning/phenotype";
 import { createPlayStyleProfile, type PlayStyleProfile } from "../playStyle";
 
 /** Every CHIMERA mind has a distinct seeded cognition — not cloned defaults. */
@@ -190,6 +191,9 @@ export function chimeraIdentitiesMatch(
 }
 
 export function seedAllChimeraPersonalities(memory: ChimeraMemory): ChimeraMemory {
+  if (memory.learning?.phenotype && !memory.chimeraOpponent) {
+    return applyOpponentPhenotype(memory, memory.learning.phenotype);
+  }
   return {
     ...memory,
     chimeraOpponent:
@@ -223,7 +227,7 @@ export function ensureDistinctChimeraPersonalities(
     };
   }
 
-  if (!next.chimeraOpponentIdentity?.entityId) {
+  if (!next.chimeraOpponentIdentity?.entityId && !next.learning?.phenotype) {
     next = {
       ...next,
       chimeraOpponent: createPersonaPlayStyle("opponent", next.chimeraOpponent?.elo ?? INITIAL_CHIMERA_ELO),

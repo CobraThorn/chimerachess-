@@ -11,6 +11,8 @@ import { maskEmail } from "../../account/validation";
 import { useAccount } from "../../hooks/useAccount";
 import { useChimeraProfile } from "../../hooks/useChimeraProfile";
 import CognitiveArchetypePanel from "../chess/CognitiveArchetypePanel";
+import ChimeraLearningPanel from "../chess/ChimeraLearningPanel";
+import ChimeraPhenotypeProfile from "../chimera/ChimeraPhenotypeProfile";
 import ChimeraMemoryRadar from "../chess/ChimeraMemoryRadar";
 import EloBadge from "../chess/EloBadge";
 import {
@@ -220,6 +222,10 @@ export default function ProfilePage() {
           sub="Adaptation"
         />
       </div>
+
+      <ChimeraLearningPanel memory={memory} />
+
+      <ChimeraPhenotypeProfile memory={memory} />
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Cognitive identity */}

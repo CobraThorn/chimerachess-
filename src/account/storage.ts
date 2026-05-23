@@ -41,6 +41,20 @@ export function saveAccount(account: UserAccount): void {
   emitAccountUpdate();
 }
 
+export function markChimeraSetupComplete(): UserAccount | null {
+  const account = loadAccount();
+  if (!account) return null;
+  const updated = { ...account, chimeraSetupComplete: true };
+  saveAccount(updated);
+  scheduleSync(500);
+  return updated;
+}
+
+export function needsChimeraSetup(): boolean {
+  const account = loadAccount();
+  return !!account?.isLoggedIn && account.chimeraSetupComplete !== true;
+}
+
 export function signOut(): void {
   const account = loadAccount();
   if (account) {
@@ -65,6 +79,7 @@ export function registerAccount(input: {
     lastLoginAt: now,
     consents: input.consents,
     isLoggedIn: true,
+    chimeraSetupComplete: false,
   };
   saveAccount(account);
   scheduleSync(500);
