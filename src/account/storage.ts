@@ -52,7 +52,7 @@ export function registerAccount(input: {
     id: crypto.randomUUID(),
     email: input.email,
     phone: input.phone,
-    displayName: input.displayName.trim() || "Operator",
+    displayName: input.displayName.trim() || "Player",
     createdAt: now,
     lastLoginAt: now,
     consents: input.consents,

@@ -2,6 +2,7 @@ import { loadAccount, loadDataEvents, saveDataEvents } from "../account/storage"
 import type { DataCollectionEvent, UserAccount } from "../account/types";
 import { ACCOUNT_EVENT } from "../account/types";
 import { resolveApiBase } from "../config/productionApi";
+import { friendlyCloudError } from "../utils/userFacingError";
 
 const SYNC_QUEUE_KEY = "chimera-sync-queue-v1";
 const SYNC_META_KEY = "chimera-sync-meta-v1";
@@ -154,8 +155,7 @@ export async function syncToBackend(): Promise<SyncResult> {
     }>(res);
 
     if (!data) {
-      const err =
-        "API returned HTML, not JSON. On Netlify set VITE_CHIMERA_API_URL to https://chimerachess-0so2.onrender.com (not chimerachess.co.uk), then redeploy.";
+      const err = friendlyCloudError("API returned HTML, not JSON");
       saveSyncMeta({
         ...loadSyncMeta(),
         lastError: err,

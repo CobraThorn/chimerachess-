@@ -100,13 +100,13 @@ export default function ProfilePage() {
             <a href="#account" className="text-[rgba(0,229,255,0.75)] underline">
               Settings → Account
             </a>{" "}
-            to enable full data collection and cognitive telemetry.
+            to save your profile and game history.
           </p>
         </div>
       ) : (
         account && (
           <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.2em] text-[rgba(52,211,153,0.55)]">
-            DATA COLLECTION ACTIVE · {maskEmail(account.email)}
+            SIGNED IN · {maskEmail(account.email)}
           </p>
         )
       )}

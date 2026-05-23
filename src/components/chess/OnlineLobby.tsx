@@ -30,7 +30,8 @@ export default function OnlineLobby({
           Online pools
         </p>
         <p className="mt-2 font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-          Match with another player on the same clock. Open two tabs to test locally.
+          Match with another player on the same time control. Both of you tap Find
+          game within a minute or two.
         </p>
         {client.serverStats && (
           <p className="mt-2 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.2em] text-[rgba(255,255,255,0.3)]">
@@ -46,7 +47,7 @@ export default function OnlineLobby({
             onClick={onConnect}
             className="nav-link rounded-sm px-6 py-2 font-[family-name:var(--font-hud)] text-[10px] tracking-[0.2em]"
           >
-            Connect to server
+            Connect
           </button>
         </div>
       )}
@@ -104,18 +105,8 @@ export default function OnlineLobby({
           {client.error}
           {!client.connected && (
             <span className="block mt-2 text-[rgba(255,255,255,0.35)]">
-              {import.meta.env.DEV ? (
-                <>
-                  Run <code className="text-[rgba(0,229,255,0.7)]">npm run dev:full</code> so the
-                  API and WebSocket are up.
-                </>
-              ) : (
-                <>
-                  Online needs the Render API (WebSocket). Set Netlify{" "}
-                  <code className="text-[rgba(0,229,255,0.7)]">VITE_CHIMERA_API_URL</code> to your
-                  Render URL and redeploy. Both players pick the same pool (bullet / blitz / rapid).
-                </>
-              )}
+              Check your connection, tap Connect, and make sure you both chose the same
+              pool (bullet, blitz, or rapid).
             </span>
           )}
         </p>

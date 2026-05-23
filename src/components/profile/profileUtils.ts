@@ -8,14 +8,14 @@ export const PROFILE_NAME_KEY = "chimera-profile-name";
 
 export function getDisplayName(): string {
   try {
-    return localStorage.getItem(PROFILE_NAME_KEY)?.trim() || "Operator";
+    return localStorage.getItem(PROFILE_NAME_KEY)?.trim() || "Player";
   } catch {
-    return "Operator";
+    return "Player";
   }
 }
 
 export function setDisplayName(name: string): void {
-  localStorage.setItem(PROFILE_NAME_KEY, name.trim() || "Operator");
+  localStorage.setItem(PROFILE_NAME_KEY, name.trim() || "Player");
 }
 
 export function getRankTitle(elo: number): string {

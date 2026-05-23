@@ -570,7 +570,7 @@ export default function ChimeraMatch() {
 
         {!sfReady && (
           <p className="mt-4 text-[10px] text-[rgba(255,255,255,0.25)]">
-            Loading Stockfish 18…
+            Preparing engine…
           </p>
         )}
       </aside>

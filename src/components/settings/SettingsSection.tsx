@@ -23,7 +23,7 @@ export default function SettingsSection() {
           SETTINGS — CONFIG
         </div>
         <h2 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-semibold tracking-wide text-gold-glow md:text-4xl">
-          Command Preferences
+          Preferences
         </h2>
         <p className="mt-6 max-w-2xl font-[family-name:var(--font-body)] text-base leading-relaxed text-[rgba(255,255,255,0.5)]">
           Tune how CHIMERA looks and feels on the board. Changes apply instantly

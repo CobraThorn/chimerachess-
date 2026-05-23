@@ -21,10 +21,8 @@ export default function OpenAiKeyPanel() {
         ChatGPT coach
       </h3>
       <p className="mt-2 max-w-xl font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-        Opening training uses OpenAI to explain every move with arrows and heat-map
-        hints. Your key stays in this browser only (localStorage). You can also set{" "}
-        <code className="text-[rgba(0,229,255,0.6)]">VITE_OPENAI_API_KEY</code> in
-        .env for dev.
+        Optional. Adds richer move explanations in opening training. Your key is stored
+        only on this device and is never sent to CHIMERA servers.
       </p>
       <div className="mt-4 flex max-w-md flex-col gap-3 sm:flex-row sm:items-end">
         <label className="flex-1">

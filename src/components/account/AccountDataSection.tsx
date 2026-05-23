@@ -23,6 +23,7 @@ import {
   syncToBackend,
 } from "../../api/chimeraBackend";
 import { useAccount } from "../../hooks/useAccount";
+import { friendlyCloudError } from "../../utils/userFacingError";
 
 type Tab = "signin" | "register";
 
@@ -33,7 +34,7 @@ const CONSENT_COPY: {
 }[] = [
   {
     key: "analytics",
-    label: "Gameplay & cognitive telemetry",
+    label: "Gameplay & training data",
     detail:
       "Moves, accuracy, cognitive map usage, opening drills, and session patterns.",
   },
@@ -126,7 +127,7 @@ export default function AccountDataSection() {
         `Synced to server${result.eventsAppended != null ? ` · ${result.eventsAppended} new events` : ""}.`
       );
     } else {
-      setError(result.error ?? "Sync failed — is the data API running?");
+      setError(friendlyCloudError(result.error ?? "Sync failed"));
     }
   };
 
@@ -153,13 +154,13 @@ export default function AccountDataSection() {
       return;
     }
     if (!consents.analytics) {
-      setError("Enable gameplay telemetry to use CHIMERA data collection.");
+      setError("Enable gameplay & training data to create an account.");
       return;
     }
     registerAccount({
       email: normEmail,
       phone: phone.trim() ? normalizePhone(phone) : null,
-      displayName: displayName.trim() || "Operator",
+      displayName: displayName.trim() || "Player",
       consents,
     });
     logDataEvent("sign_up", { analytics: consents.analytics });
@@ -206,7 +207,7 @@ export default function AccountDataSection() {
     }
     updateAccount({
       phone: phone.trim() ? normalizePhone(phone) : null,
-      displayName: displayName.trim() || "Operator",
+      displayName: displayName.trim() || "Player",
       consents,
     });
     logDataEvent("consent_update", {
@@ -237,15 +238,14 @@ export default function AccountDataSection() {
       className="mt-10 border-t border-[rgba(232,197,71,0.1)] pt-10 scroll-mt-28"
     >
       <div className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.35em] text-[rgba(0,229,255,0.5)]">
-        IDENTITY & DATA COLLECTION
+        ACCOUNT & PRIVACY
       </div>
       <h3 className="mt-2 font-[family-name:var(--font-display)] text-xl text-gold-glow">
-        Operator access
+        Your account
       </h3>
       <p className="mt-2 max-w-2xl font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-        Sign in with email and optional phone. Data syncs to the CHIMERA data
-        API (local: <code className="text-[rgba(0,229,255,0.6)]">npm run dev:full</code> ·
-        live: set <code className="text-[rgba(0,229,255,0.6)]">VITE_CHIMERA_API_URL</code> (e.g. api.chimerachess.co.uk — see docs/DEPLOY-CUSTOM-DOMAIN.md).
+        Sign in with email and optional phone to save progress and sync your
+        games across devices.
       </p>
 
       {error && (
@@ -277,26 +277,24 @@ export default function AccountDataSection() {
               {account.phone ? ` · ${account.phone}` : ""}
             </p>
             <p className="mt-2 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.25)]">
-              {eventCount} events local
+              {eventCount} events on this device
               {syncMeta.pendingCount > 0
-                ? ` · ${syncMeta.pendingCount} queued for sync`
+                ? ` · ${syncMeta.pendingCount} waiting to sync`
                 : ""}
             </p>
             <div className="mt-3 rounded-sm border border-[rgba(0,229,255,0.15)] bg-[rgba(0,229,255,0.04)] px-3 py-2">
               <p className="font-[family-name:var(--font-hud)] text-[7px] tracking-[0.15em] text-[rgba(0,229,255,0.6)]">
-                SERVER{" "}
+                CLOUD SYNC{" "}
                 {apiOnline === null
                   ? "…"
                   : apiOnline
-                    ? "ONLINE"
-                    : import.meta.env.DEV
-                      ? "OFFLINE — run npm run server (or npm run dev:full)"
-                      : "OFFLINE — check Netlify VITE_CHIMERA_API_URL → Render"}
+                    ? "CONNECTED"
+                    : "UNAVAILABLE"}
               </p>
               <p className="mt-1 font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.4)]">
                 {syncMeta.lastOk && syncMeta.lastSyncedAt
-                  ? `Last sync ${new Date(syncMeta.lastSyncedAt).toLocaleString()}`
-                  : syncMeta.lastError ?? "Not synced yet"}
+                  ? `Last synced ${new Date(syncMeta.lastSyncedAt).toLocaleString()}`
+                  : friendlyCloudError(syncMeta.lastError) ?? "Not synced yet"}
               </p>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -401,7 +399,7 @@ export default function AccountDataSection() {
                   label="Display name"
                   value={displayName}
                   onChange={setDisplayName}
-                  placeholder="Operator"
+                  placeholder="Your name"
                 />
               )}
               <button
@@ -418,8 +416,8 @@ export default function AccountDataSection() {
                 DATA COLLECTION CONSENT
               </p>
               <p className="mt-2 font-[family-name:var(--font-body)] text-[11px] text-[rgba(255,255,255,0.4)]">
-                Required for register: gameplay telemetry. You can change
-                preferences anytime in Settings.
+                Required to register. You can change preferences anytime in
+                Settings.
               </p>
               <div className="mt-4">
                 <ConsentToggles
@@ -526,7 +524,7 @@ function DataCollectionAreas() {
         }}
         className="mt-4 font-[family-name:var(--font-hud)] text-[7px] tracking-[0.12em] text-[rgba(255,255,255,0.25)] hover:text-[rgba(255,120,120,0.7)]"
       >
-        Clear local telemetry buffer
+        Clear saved activity on this device
       </button>
     </div>
   );
