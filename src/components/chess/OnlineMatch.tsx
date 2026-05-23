@@ -19,9 +19,18 @@ import ChessBoardGrid from "./ChessBoardGrid";
 import ChessPiece from "./ChessPiece";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
+import { loadMemory, saveMemory } from "../../ai";
+import type { StoredGame } from "../../ai/types";
 import { onlineMovesToRecords } from "../../review/buildGameReview";
 import { onlineResultToReview } from "../../review/types";
 import GameReviewPanel from "../review/GameReviewPanel";
+import {
+  applyCrsForStoredGame,
+  clearCrsPostGame,
+  tcToCrsMode,
+} from "../../crs/profile";
+import type { CrsPostGameSummary } from "../../crs/types";
+import CrsPostGamePanel from "../crs/CrsPostGamePanel";
 
 interface OnlineMatchProps {
   client: OnlineClientState;
@@ -79,9 +88,11 @@ export default function OnlineMatch({
   const { report, loading, progress, runReview, dismiss } = useGameReview();
   const reviewEngineRef = useRef<StockfishEngine | null>(null);
   const reviewStartedRef = useRef(false);
+  const [crsPostGame, setCrsPostGame] = useState<CrsPostGameSummary | null>(null);
 
   useEffect(() => {
     reviewStartedRef.current = false;
+    setCrsPostGame(null);
   }, [match.gameId]);
 
   useEffect(() => {
@@ -89,6 +100,29 @@ export default function OnlineMatch({
     const history = match.moveHistory ?? [];
     if (history.length < 2) return;
     reviewStartedRef.current = true;
+
+    const result = onlineResultToReview(client.result, userColor);
+    const stored: StoredGame = {
+      id: match.gameId,
+      startedAt: match.startedAt,
+      endedAt: Date.now(),
+      userColor,
+      moves: onlineMovesToRecords(history),
+      mistakes: [],
+      result,
+      openingLine: history
+        .slice(0, 6)
+        .map((m) => m.san ?? m.uci)
+        .join(" "),
+    };
+
+    const mem = loadMemory();
+    const mode = tcToCrsMode(match.tc);
+    const next = applyCrsForStoredGame(mem, stored, mode, 1200);
+    saveMemory(next);
+    if (next.crs?.lastPostGame) {
+      setCrsPostGame(next.crs.lastPostGame);
+    }
 
     const engine = createStockfishEngine();
     reviewEngineRef.current = engine;
@@ -118,6 +152,8 @@ export default function OnlineMatch({
     match.gameId,
     match.moveHistory,
     match.opponent.name,
+    match.startedAt,
+    match.tc,
     userColor,
     runReview,
   ]);
@@ -195,8 +231,20 @@ export default function OnlineMatch({
   const oppMs = userColor === "w" ? displayClock.b : displayClock.w;
   const lowTime = myMs < 10_000;
 
+  const dismissCrsPostGame = useCallback(() => {
+    setCrsPostGame(null);
+    const mem = loadMemory();
+    saveMemory(clearCrsPostGame(mem));
+  }, []);
+
   return (
     <>
+    {crsPostGame && (
+      <CrsPostGamePanel
+        summary={crsPostGame}
+        onContinue={dismissCrsPostGame}
+      />
+    )}
     <GameReviewPanel
       report={report}
       loading={loading}

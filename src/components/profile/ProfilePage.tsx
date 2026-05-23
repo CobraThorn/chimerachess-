@@ -5,7 +5,7 @@ import {
   resetAllStats,
   userStyleToRadar,
 } from "../../ai";
-import { INITIAL_CHIMERA_ELO, INITIAL_USER_ELO } from "../../ai/types";
+import { INITIAL_CHIMERA_ELO } from "../../ai/types";
 import { logDataEvent } from "../../account/events";
 import { maskEmail } from "../../account/validation";
 import { useAccount } from "../../hooks/useAccount";
@@ -13,6 +13,12 @@ import { useChimeraProfile } from "../../hooks/useChimeraProfile";
 import CognitiveArchetypePanel from "../chess/CognitiveArchetypePanel";
 import ChimeraMemoryRadar from "../chess/ChimeraMemoryRadar";
 import EloBadge from "../chess/EloBadge";
+import {
+  computeAvgAccuracyFromMemory,
+  computeBlunderRateFromMemory,
+  ensureCrsState,
+} from "../../crs/profile";
+import CrsProfileSection from "../crs/CrsProfileSection";
 import {
   archetypeHeadline,
   avgCpLoss,
@@ -67,9 +73,11 @@ export default function ProfilePage() {
     setNameDraft(displayName);
   }, [displayName]);
 
-  const userElo = memory.userStyle?.elo ?? INITIAL_USER_ELO;
+  const crs = ensureCrsState(memory);
+  const userElo = crs.chimeraRating;
   const chimeraElo = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
   const rank = getRankTitle(userElo);
+  const wr = winRate(memory);
   const recentGames = [...memory.games].reverse().slice(0, 8);
   const patterns = getTopPatterns(memory, 5);
   const achievements = computeAchievements(memory);
@@ -178,8 +186,10 @@ export default function ProfilePage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          <EloBadge label="Your rating" elo={userElo} variant="gold" size="lg" />
-          <EloBadge label="CHIMERA" elo={chimeraElo} variant="cyan" size="md" />
+          <p className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.25em] text-gold-glow uppercase">
+            {rank}
+          </p>
+          <EloBadge label="CHIMERA strength" elo={chimeraElo} variant="cyan" size="md" />
           <a
             href="#play"
             className="btn-cta rounded-sm border border-[rgba(232,197,71,0.45)] px-5 py-3 font-[family-name:var(--font-hud)] text-[9px] tracking-[0.2em] text-[#ffe566]"
@@ -188,6 +198,14 @@ export default function ProfilePage() {
           </a>
         </div>
       </motion.div>
+
+      <CrsProfileSection
+        crs={crs}
+        gamesPlayed={memory.stats.totalGames}
+        winRatePct={wr}
+        blunderRate={computeBlunderRateFromMemory(memory)}
+        avgAccuracy={computeAvgAccuracyFromMemory(memory)}
+      />
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

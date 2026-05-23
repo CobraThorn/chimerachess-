@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
 import { loadMemory } from "../ai";
+import { ensureCrsState } from "../crs/profile";
 import {
   CHIMERA_MEMORY_EVENT,
   CHIMERA_STORAGE_KEY,
   INITIAL_CHIMERA_ELO,
-  INITIAL_USER_ELO,
 } from "../ai/types";
 
 export function useChimeraElo() {
-  const [userElo, setUserElo] = useState(INITIAL_USER_ELO);
+  const [userCrs, setUserCrs] = useState(100);
   const [chimeraElo, setChimeraElo] = useState(INITIAL_CHIMERA_ELO);
 
   const refresh = () => {
     const m = loadMemory();
-    setUserElo(m.userStyle?.elo ?? INITIAL_USER_ELO);
+    const crs = ensureCrsState(m);
+    setUserCrs(crs.chimeraRating);
     setChimeraElo(m.chimeraElo ?? INITIAL_CHIMERA_ELO);
   };
-
   useEffect(() => {
     refresh();
     const onStorage = (e: StorageEvent) => {
@@ -33,5 +33,5 @@ export function useChimeraElo() {
     };
   }, []);
 
-  return { userElo, chimeraElo, refresh };
+  return { userCrs, userElo: userCrs, chimeraElo, refresh };
 }

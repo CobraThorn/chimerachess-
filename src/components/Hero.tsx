@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
 import { useChimeraElo } from "../hooks/useChimeraElo";
+import { loadMemory } from "../ai";
+import { ensureCrsState } from "../crs/profile";
 import ChimeraAcronym from "./ChimeraAcronym";
 import EloBadge from "./chess/EloBadge";
-
+import CrsRatingCard from "./crs/CrsRatingCard";
 const CTAS = [
   {
     id: "play",
@@ -45,8 +47,8 @@ const item = {
 };
 
 export default function Hero() {
-  const { userElo, chimeraElo } = useChimeraElo();
-
+  const { chimeraElo } = useChimeraElo();
+  const crs = ensureCrsState(loadMemory());
   return (
     <section
       id="home"
@@ -98,9 +100,8 @@ export default function Hero() {
           variants={item}
           className="mt-8 flex flex-wrap items-center justify-center gap-3"
         >
-          <EloBadge label="Your rating" elo={userElo} variant="gold" size="sm" />
-          <EloBadge label="CHIMERA" elo={chimeraElo} variant="cyan" size="sm" />
-        </motion.div>
+          <CrsRatingCard crs={crs} compact />
+          <EloBadge label="CHIMERA strength" elo={chimeraElo} variant="cyan" size="sm" />        </motion.div>
 
         <motion.div
           variants={item}

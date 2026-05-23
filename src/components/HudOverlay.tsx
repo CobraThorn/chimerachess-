@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { useChimeraElo } from "../hooks/useChimeraElo";
 
 export default function HudOverlay() {
-  const { userElo } = useChimeraElo();
+  const { userCrs } = useChimeraElo();
   return (
     <div className="pointer-events-none absolute inset-0 z-[2] scanlines" aria-hidden>
       <div className="vignette absolute inset-0" />
@@ -40,7 +40,7 @@ export default function HudOverlay() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 1.4, duration: 0.8 }}
       >
-        <div>ELO {userElo}</div>
+        <div>CRS {userCrs}</div>
         <div className="mt-1 text-[rgba(0,229,255,0.4)]">RATED</div>
         <motion.div
           className="mt-3 h-16 w-px bg-gradient-to-b from-[rgba(232,197,71,0.5)] via-[rgba(0,229,255,0.3)] to-transparent ml-auto"

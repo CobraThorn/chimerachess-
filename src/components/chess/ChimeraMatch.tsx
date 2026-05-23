@@ -22,7 +22,6 @@ import { useCustomisation } from "../../customisation";
 import {
   CHIMERA_MEMORY_EVENT,
   INITIAL_CHIMERA_ELO,
-  INITIAL_USER_ELO,
 } from "../../ai/types";
 import ChimeraMemoryRadar from "./ChimeraMemoryRadar";
 import ChessBoardGrid from "./ChessBoardGrid";
@@ -47,6 +46,9 @@ import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "
 import { useGameReview } from "../../hooks/useGameReview";
 import type { GameReviewInput } from "../../review/types";
 import GameReviewPanel from "../review/GameReviewPanel";
+import { clearCrsPostGame, ensureCrsState } from "../../crs/profile";
+import CrsPostGamePanel from "../crs/CrsPostGamePanel";
+import CrsRatingCard from "../crs/CrsRatingCard";
 
 function opponentColor(color: Color): Color {
   return color === "w" ? "b" : "w";
@@ -86,7 +88,9 @@ export default function ChimeraMatch() {
   const userTurn = state.turn === userColor;
   const moveCount = gameRef.current?.moves.length ?? 0;
   const canPickColor = (moveCount === 0 || !!gameOver) && !chimeraThinking;
-  const userElo = memory.userStyle?.elo ?? INITIAL_USER_ELO;
+  const crs = memory.crs ?? ensureCrsState(memory);
+  const userElo = crs.chimeraRating;
+  const crsPostGame = memory.crs?.lastPostGame;
   const chimeraElo = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
   const chimeraIdentity = memory.chimeraOpponentIdentity;
   const chimeraSub = chimeraIdentity
@@ -401,8 +405,22 @@ export default function ChimeraMatch() {
         : "text-[rgba(255,255,255,0.4)] hover:text-[rgba(255,255,255,0.7)]"
     }`;
 
+  const dismissCrsPostGame = useCallback(() => {
+    setMemory((prev) => {
+      const next = clearCrsPostGame(prev);
+      saveMemory(next);
+      return next;
+    });
+  }, []);
+
   return (
     <>
+    {crsPostGame && (
+      <CrsPostGamePanel
+        summary={crsPostGame}
+        onContinue={dismissCrsPostGame}
+      />
+    )}
     <GameReviewPanel
       report={report}
       loading={loading}
@@ -421,14 +439,8 @@ export default function ChimeraMatch() {
       <div className="flex w-full min-w-0 flex-col items-center gap-6">
         <div className="flex w-full min-w-0 max-w-[min(100%,32rem)] flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <EloBadge
-                label="You"
-                elo={userElo}
-                delta={showEloDelta ? memory.lastEloChange : undefined}
-                variant="gold"
-                size="md"
-              />
+            <div className="flex items-center gap-3">
+              <CrsRatingCard crs={crs} delta={showEloDelta ? memory.lastEloChange : undefined} compact />
               <span className="font-[family-name:var(--font-hud)] text-[10px] text-[rgba(255,255,255,0.2)]">
                 VS
               </span>

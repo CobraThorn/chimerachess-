@@ -1,4 +1,5 @@
 import type { Color } from "../chess";
+import type { ChimeraRatingState } from "../crs/types";
 import type { CognitiveIdentity } from "./cognition/identity";
 import type { PlayStyleProfile } from "./playStyle";
 
@@ -87,6 +88,8 @@ export interface ChimeraMemory {
   lastEloChange?: number;
   /** Last CHIMERA Elo change after a rated game */
   lastChimeraEloChange?: number;
+  /** Chimera Rating System — skill, modes, history, hidden confidence */
+  crs?: ChimeraRatingState;
 }
 
 export const INITIAL_USER_ELO = 100;
