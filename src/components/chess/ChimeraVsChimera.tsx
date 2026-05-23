@@ -217,7 +217,7 @@ export default function ChimeraVsChimera() {
       </aside>
 
       <div className="order-1 flex flex-col items-center gap-6 lg:order-2">
-        <div className="flex w-full max-w-[min(92vw,520px)] flex-wrap items-center justify-between gap-3">
+        <div className="flex w-full min-w-0 max-w-[min(100%,32rem)] flex-wrap items-center justify-between gap-3">
           <div>
             <p className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.25em] text-gold-glow uppercase">
               CHIMERA vs CHIMERA

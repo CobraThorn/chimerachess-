@@ -272,7 +272,7 @@ export default function StockfishAnalysis() {
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start lg:justify-center">
+      <div className="flex w-full min-w-0 flex-col items-center gap-8 lg:flex-row lg:items-start lg:justify-center">
         <div className="flex items-stretch gap-2">
           {analysisOn && (
             <EvalBar
@@ -283,7 +283,7 @@ export default function StockfishAnalysis() {
               thinking={thinking}
             />
           )}
-          <div className="relative">
+          <div className="relative min-w-0 w-full max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
             <ChessBoardGrid
               state={state}
               orientation={orientation}

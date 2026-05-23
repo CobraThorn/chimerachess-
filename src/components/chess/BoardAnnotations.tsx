@@ -72,7 +72,7 @@ export default function BoardAnnotations({
 
   return (
     <div
-      className="pointer-events-none absolute inset-2 grid grid-cols-8 gap-0"
+      className="pointer-events-none absolute inset-2 grid grid-cols-8 grid-rows-8 gap-0"
       aria-hidden
     >
       {showHeatMap &&
@@ -85,7 +85,7 @@ export default function BoardAnnotations({
           return (
             <div
               key={`heat-${sq}`}
-              className="aspect-square transition-opacity duration-300"
+              className="size-full min-h-0 min-w-0 transition-opacity duration-300"
               style={{ backgroundColor: heatColor(intensity) }}
             />
           );

@@ -464,8 +464,8 @@ export default function OpeningDrill({ opening, onBack }: OpeningDrillProps) {
       </div>
 
       <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-center">
-        <div className="relative flex justify-center">
-          <div className="relative">
+        <div className="relative flex w-full min-w-0 justify-center">
+          <div className="relative w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
             <ChessBoardGrid
               state={boardState}
               orientation={orientation}

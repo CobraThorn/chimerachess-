@@ -52,7 +52,7 @@ export default function CognitiveBoardOverlay({
   return (
     <>
       <div
-        className={`pointer-events-none absolute inset-2 grid grid-cols-8 gap-0 ${
+        className={`pointer-events-none absolute inset-2 grid grid-cols-8 grid-rows-8 gap-0 ${
           tiltPulse ? "animate-[tilt-pulse_2s_ease-in-out_infinite]" : ""
         }`}
         aria-hidden
@@ -63,7 +63,7 @@ export default function CognitiveBoardOverlay({
           const sq = displayRank(vr) * 8 + displayFile(vf);
           const cell = cellBySq.get(sq);
           if (!cell) {
-            return <div key={`cog-${sq}`} className="aspect-square" />;
+            return <div key={`cog-${sq}`} className="size-full min-h-0 min-w-0" />;
           }
           const rgb = STATE_RGB[cell.state];
           const alpha = 0.22 + cell.intensity * 0.58;
@@ -72,7 +72,7 @@ export default function CognitiveBoardOverlay({
           return (
             <div
               key={`cog-${sq}`}
-              className={`pointer-events-auto aspect-square transition-opacity duration-300 ${
+              className={`pointer-events-auto size-full min-h-0 min-w-0 transition-opacity duration-300 ${
                 pulse ? "cognitive-pulse" : ""
               }`}
               style={{

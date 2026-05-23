@@ -31,10 +31,10 @@ export default function ChessPiece({ color, type, pieceSet }: ChessPieceProps) {
     return (
       <span
         className={[
-          "pointer-events-none flex h-[90%] w-[90%] select-none items-center justify-center leading-none",
+          "pointer-events-none flex h-[88%] w-[88%] max-h-full max-w-full select-none items-center justify-center leading-none",
           color === "w" ? pieceSet.whiteClass : pieceSet.blackClass,
         ].join(" ")}
-        style={{ fontSize: "88cqmin" }}
+        style={{ fontSize: "min(88cqmin, 88%)" }}
         aria-hidden
       >
         {pieceSet.symbols[color][type]}
@@ -48,7 +48,7 @@ export default function ChessPiece({ color, type, pieceSet }: ChessPieceProps) {
       alt=""
       draggable={false}
       className={[
-        "pointer-events-none h-[90%] w-[90%] max-h-full max-w-full object-contain",
+        "pointer-events-none h-[88%] w-[88%] max-h-full max-w-full object-contain",
         color === "w" ? pieceSet.whiteClass : pieceSet.blackClass,
       ].join(" ")}
     />

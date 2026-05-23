@@ -412,8 +412,8 @@ export default function ChimeraMatch() {
       }}
     />
     <div className="flex w-full max-w-5xl flex-col gap-8 lg:flex-row lg:items-start lg:justify-center">
-      <div className="flex flex-col items-center gap-6">
-        <div className="flex w-full max-w-[min(92vw,520px)] flex-wrap items-center justify-between gap-3">
+      <div className="flex w-full min-w-0 flex-col items-center gap-6">
+        <div className="flex w-full min-w-0 max-w-[min(100%,32rem)] flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <EloBadge
@@ -494,7 +494,7 @@ export default function ChimeraMatch() {
           </div>
         </div>
 
-        <div className="relative">
+        <div className="relative w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
           <ChessBoardGrid
             state={state}
             orientation={userColor}

@@ -206,8 +206,8 @@ export default function OnlineMatch({
       onClose={dismiss}
     />
     <div className="flex w-full max-w-5xl flex-col gap-8 lg:flex-row lg:items-start lg:justify-center">
-      <div className="flex flex-col items-center gap-6">
-        <div className="flex w-full max-w-[min(92vw,520px)] flex-wrap items-center justify-between gap-3">
+      <div className="flex w-full min-w-0 flex-col items-center gap-6">
+        <div className="flex w-full min-w-0 max-w-[min(100%,32rem)] flex-wrap items-center justify-between gap-3">
           <div>
             <p className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.25em] text-gold-glow uppercase">
               {match.tcLabel} · Online
@@ -243,7 +243,7 @@ export default function OnlineMatch({
           </div>
         </div>
 
-        <div className="relative">
+        <div className="relative w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
           <ChessBoardGrid
             state={state}
             orientation={userColor}
