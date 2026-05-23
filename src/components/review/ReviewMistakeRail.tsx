@@ -1,4 +1,5 @@
 import type { GameReviewReport, MoveGrade } from "../../review/types";
+import { missSizeWord } from "../../review/metricsDisplay";
 
 const CHIP: Record<
   MoveGrade,
@@ -103,7 +104,7 @@ export default function ReviewMistakeRail({
                 {c.label} Move {Math.ceil(m.ply / 2)}
               </span>
               <span className="mt-0.5 block font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.5)]">
-                {m.san ?? m.uci} · {m.accuracyPct}% · −{m.cpLoss}cp
+                {m.san ?? m.uci} · {m.accuracyPct}% · {missSizeWord(m.cpLoss)}
               </span>
             </button>
           );

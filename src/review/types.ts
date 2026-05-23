@@ -96,9 +96,13 @@ export interface GameReviewReport {
   durationMs: number;
   totalPlies: number;
   accuracy: number;
-  /** Average centipawn loss (ACPL) — lower is stronger */
+  /** Average centipawn loss (internal) — display avgMissLabel instead */
   averageCpLoss: number;
   acpl: number;
+  /** Plain-language quality band (Excellent / Strong / …) */
+  playQuality: string;
+  /** Average mistake size label e.g. "0.3 pawns" */
+  avgMissLabel: string;
   brilliant: number;
   great: number;
   good: number;

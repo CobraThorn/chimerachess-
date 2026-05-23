@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEvalLabel, evalToBarPercent } from "../../engine/analysis";
+import { missSizeWord } from "../../review/metricsDisplay";
 import { HEAT_PASTEL } from "../../review/heatPalette";
 import { mergeSquareHeats } from "../../review/positionInsights";
 import { stateAtPly } from "../../review/replay";
@@ -330,8 +331,8 @@ export default function GameReviewRecap({
                   <span
                     className={`mt-2 inline-block font-[family-name:var(--font-hud)] text-sm ${GRADE_STYLES[userMove.grade].className}`}
                   >
-                    {GRADE_STYLES[userMove.grade].label} · {userMove.accuracyPct}% accuracy · −
-                    {userMove.cpLoss}cp · best {userMove.bestUci}
+                    {GRADE_STYLES[userMove.grade].label} · {userMove.accuracyPct}% accuracy ·{" "}
+                    {missSizeWord(userMove.cpLoss)} · best {userMove.bestUci}
                   </span>
                 )}
                 <p className="mt-4 font-[family-name:var(--font-body)] text-sm leading-relaxed text-[rgba(255,255,255,0.62)]">

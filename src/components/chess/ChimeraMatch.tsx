@@ -41,6 +41,7 @@ import {
   uciToMove,
 } from "../../chess";
 import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
+import { missSizeWord } from "../../review/metricsDisplay";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
@@ -335,7 +336,7 @@ export default function ChimeraMatch() {
             if (mistake && gameRef.current) {
               gameRef.current.mistakes.push(mistake);
               setLastInsight(
-                `CHIMERA noted your ${mistake.category}: ${mistake.played} → better ${mistake.best} (−${mistake.cpLoss}cp)`
+                `CHIMERA noted your ${mistake.category}: ${mistake.played} → better ${mistake.best} (${missSizeWord(mistake.cpLoss)})`
               );
             }
             setMemory((prev) => {

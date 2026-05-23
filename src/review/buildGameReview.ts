@@ -7,6 +7,12 @@ import { evalFromResult, formatEvalLabel } from "../engine/analysis";
 import type { StockfishEngine } from "../engine/stockfish";
 import { getEvaluation, getTopMoves } from "../engine/stockfish";
 import {
+  formatAvgMissPerMove,
+  formatEnginePreferredOver,
+  missSizeWord,
+  playQualityFromAcpl,
+} from "./metricsDisplay";
+import {
   averageAccuracy,
   averageCentipawnLoss,
   cpLossToAccuracy,
@@ -51,14 +57,12 @@ function insightFor(
   if (grade === "brilliant" || grade === "great") {
     return "Precise — you matched the engine's top choice.";
   }
-  if (grade === "good") return "Solid. The position stays within a small margin of best play.";
+  if (grade === "good") return "Solid. The position stays close to the engine's best line.";
   if (grade === "inaccuracy") {
-    return `Slightly imprecise (−${cpLoss}cp). Engine prefers ${bestUci} over ${playedUci}.`;
+    return formatEnginePreferredOver(bestUci, playedUci, cpLoss);
   }
-  if (grade === "mistake") {
-    return `Missed stronger play (−${cpLoss}cp). ${bestUci} keeps more pressure.`;
-  }
-  return `Critical swing (−${cpLoss}cp). ${bestUci} was much stronger than ${playedUci}.`;
+  const sized = missSizeWord(cpLoss);
+  return `${sized.charAt(0).toUpperCase()}${sized.slice(1)} — ${formatEnginePreferredOver(bestUci, playedUci, cpLoss)}`;
 }
 
 function resultLabel(result: GameReviewReport["result"], mode: GameReviewInput["mode"]): string {
@@ -69,8 +73,9 @@ function resultLabel(result: GameReviewReport["result"], mode: GameReviewInput["
 
 function buildNarrative(report: Omit<GameReviewReport, "narrative">): string[] {
   const lines: string[] = [];
+  const quality = playQualityFromAcpl(report.acpl);
   lines.push(
-    `You scored ${report.accuracy}% accuracy (ACPL ${report.acpl}) over ${report.userMoves.length} moves.`
+    `You scored ${report.accuracy}% accuracy over ${report.userMoves.length} moves — overall play: ${quality.label} (${formatAvgMissPerMove(report.acpl)} mistake size on average).`
   );
   if (report.blunders > 0) {
     lines.push(
@@ -219,6 +224,7 @@ export async function buildGameReview(
   const cpLosses = userAnalyses.map((u) => u.cpLoss);
   const accuracy = averageAccuracy(cpLosses);
   const acpl = averageCentipawnLoss(cpLosses);
+  const quality = playQualityFromAcpl(acpl);
 
   const phaseMap = new Map<GamePhaseStats["phase"], { acc: number[]; worst: number }>();
   for (const u of userAnalyses) {
@@ -266,6 +272,8 @@ export async function buildGameReview(
     accuracy,
     averageCpLoss: acpl,
     acpl,
+    playQuality: quality.label,
+    avgMissLabel: formatAvgMissPerMove(acpl),
     ...counts,
     openingLine,
     phases,

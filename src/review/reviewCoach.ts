@@ -1,3 +1,4 @@
+import { formatPawnAmount } from "./metricsDisplay";
 import { formatEvalLabel } from "../engine/analysis";
 import { getOpenAiApiKey, hasOpenAiApiKey } from "../api/openaiKey";
 import type {
@@ -96,7 +97,7 @@ function buildLocalNote(
       explanation:
         `${gradeLine}${fileHint}${blindHint} Eval after this move: ${evalLabel}. ` +
         (ua.cpLoss > 0
-          ? `Engine line ${ua.bestUci} was about ${ua.cpLoss}cp better.`
+          ? `Engine line ${ua.bestUci} was about ${formatPawnAmount(ua.cpLoss)} better.`
           : "This matched or nearly matched the top engine continuation."),
       teachingPoint:
         ua.position.futureScanHabits[0] ??
@@ -242,7 +243,7 @@ Cover: result emotion, biggest turning point, one strength, one training focus. 
   const user = `Result: ${report.resultLabel}
 Accuracy: ${report.accuracy}%
 Blunders: ${report.blunders}, mistakes: ${report.mistakes}
-Critical: ${report.criticalMoments.map((c) => `${c.san ?? c.uci} (-${c.cpLoss}cp)`).join("; ") || "none"}
+Critical: ${report.criticalMoments.map((c) => `${c.san ?? c.uci} (${formatPawnAmount(c.cpLoss)} lost)`).join("; ") || "none"}
 Narrative: ${report.narrative.join(" ")}`;
 
   const baseUrl = import.meta.env.DEV

@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { useReviewCoach } from "../../hooks/useReviewCoach";
 import { formatEvalLabel } from "../../engine/analysis";
+import { cpToPawns, missSizeWord } from "../../review/metricsDisplay";
 import type { GameReviewReport, MoveGrade, ReviewProgress } from "../../review/types";
 import GameReviewRecap from "./GameReviewRecap";
 
@@ -126,7 +127,8 @@ export default function GameReviewPanel({
               </p>
               <div className="mt-6 flex flex-wrap gap-4">
                 <StatRing label="Accuracy" value={`${report.accuracy}%`} accent="cyan" />
-                <StatRing label="ACPL" value={`${report.acpl}`} accent="gold" />
+                <StatRing label="Play quality" value={report.playQuality} accent="gold" />
+                <StatRing label="Avg. mistake" value={report.avgMissLabel} accent="gold" />
                 <StatRing label="Blunders" value={String(report.blunders)} accent="red" />
                 <StatRing label="Mistakes" value={String(report.mistakes)} accent="gold" />
               </div>
@@ -176,7 +178,7 @@ export default function GameReviewPanel({
                         {ph.avgAccuracy}% accuracy
                       </p>
                       <p className="mt-1 font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.35)]">
-                        {ph.moves} of your moves · worst −{ph.worstLoss}cp
+                        {ph.moves} of your moves · biggest miss ~{cpToPawns(ph.worstLoss)} pawns
                       </p>
                     </div>
                   ))}
@@ -300,8 +302,7 @@ function CriticalCard({
         {move.insight}
       </p>
       <p className="mt-2 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(0,229,255,0.45)]">
-        Eval {formatEvalLabel(move.evalBeforeWhite)} →{" "}
-        {formatEvalLabel(move.evalAfterWhite)} (−{move.cpLoss}cp)
+        Eval {formatEvalLabel(move.evalBeforeWhite)} → {formatEvalLabel(move.evalAfterWhite)}
       </p>
     </div>
   );
@@ -320,7 +321,9 @@ function MoveRow({ move }: { move: GameReviewReport["userMoves"][0] }) {
         <p className="font-[family-name:var(--font-body)] text-sm text-white">
           <span className="text-[rgba(255,255,255,0.35)]">{Math.ceil(move.ply / 2)}.</span>{" "}
           {move.san ?? move.uci}
-          <span className="ml-2 text-[rgba(255,160,80,0.8)]">−{move.cpLoss}cp · {move.accuracyPct}%</span>
+          <span className="ml-2 text-[rgba(255,160,80,0.8)]">
+            {move.accuracyPct}% · {missSizeWord(move.cpLoss)}
+          </span>
         </p>
         <p className="mt-0.5 truncate font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.35)]">
           {move.insight}
