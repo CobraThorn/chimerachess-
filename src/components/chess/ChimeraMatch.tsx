@@ -43,6 +43,9 @@ import {
 } from "../../chess";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
+import { useGameReview } from "../../hooks/useGameReview";
+import type { GameReviewInput } from "../../review/types";
+import GameReviewPanel from "../review/GameReviewPanel";
 
 function opponentColor(color: Color): Color {
   return color === "w" ? "b" : "w";
@@ -66,6 +69,8 @@ export default function ChimeraMatch() {
   const [chimeraThinking, setChimeraThinking] = useState(false);
   const [lastInsight, setLastInsight] = useState<string | null>(null);
   const [gameOver, setGameOver] = useState<string | null>(null);
+  const [reviewInput, setReviewInput] = useState<GameReviewInput | null>(null);
+  const { report, loading, progress, runReview, dismiss } = useGameReview();
 
   const engineRef = useRef<StockfishEngine | null>(null);
   const gameRef = useRef<{
@@ -117,6 +122,8 @@ export default function ChimeraMatch() {
     setLastMoveSan(null);
     setPromotionPick(null);
     setGameOver(null);
+    setReviewInput(null);
+    dismiss();
     setLastInsight(null);
     gameRef.current = {
       id: crypto.randomUUID(),
@@ -124,7 +131,7 @@ export default function ChimeraMatch() {
       mistakes: [],
       startedAt: Date.now(),
     };
-  }, []);
+  }, [dismiss]);
 
   const pickColor = useCallback(
     (color: Color) => {
@@ -138,6 +145,11 @@ export default function ChimeraMatch() {
   useEffect(() => {
     startNewGame();
   }, [startNewGame]);
+
+  useEffect(() => {
+    if (!reviewInput || !sfReady || !engineRef.current) return;
+    void runReview(engineRef.current, reviewInput);
+  }, [reviewInput, sfReady, runReview]);
 
   useEffect(() => {
     const onMemoryUpdate = () => setMemory(loadMemory());
@@ -172,6 +184,17 @@ export default function ChimeraMatch() {
       moves: stored.moves.length,
       mistakes: stored.mistakes.length,
     });
+    setReviewInput({
+      id: stored.id,
+      mode: "chimera",
+      opponentLabel: "CHIMERA",
+      userColor,
+      result: stored.result,
+      startedAt: stored.startedAt,
+      endedAt: stored.endedAt,
+      moves: [...stored.moves],
+      liveMistakes: [...stored.mistakes],
+    });
     gameRef.current = null;
   }, [userColor]);
 
@@ -180,10 +203,14 @@ export default function ChimeraMatch() {
       const st = getGameStatus(s);
       if (st.type === "checkmate") {
         const userWon = st.winner === userColor;
-        setGameOver(userWon ? "You win — CHIMERA recorded this game." : "CHIMERA wins — reviewing your patterns.");
+        setGameOver(
+          userWon
+            ? "You win — full game review loading…"
+            : "CHIMERA wins — full game review loading…"
+        );
         persistFinishedGame(userWon ? "user-win" : "chimera-win");
       } else if (st.type === "stalemate" || st.type === "draw") {
-        setGameOver("Draw — logged to memory.");
+        setGameOver("Draw — full game review loading…");
         persistFinishedGame("draw");
       }
     },
@@ -369,6 +396,21 @@ export default function ChimeraMatch() {
     }`;
 
   return (
+    <>
+    <GameReviewPanel
+      report={report}
+      loading={loading}
+      progress={progress}
+      onClose={() => {
+        dismiss();
+        setReviewInput(null);
+      }}
+      onNewGame={() => {
+        dismiss();
+        setReviewInput(null);
+        startNewGame();
+      }}
+    />
     <div className="flex w-full max-w-5xl flex-col gap-8 lg:flex-row lg:items-start lg:justify-center">
       <div className="flex flex-col items-center gap-6">
         <div className="flex w-full max-w-[min(92vw,520px)] flex-wrap items-center justify-between gap-3">
@@ -575,5 +617,6 @@ export default function ChimeraMatch() {
         )}
       </aside>
     </div>
+    </>
   );
 }

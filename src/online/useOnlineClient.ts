@@ -89,6 +89,7 @@ export function useOnlineClient() {
             incrementMs: Number(msg.incrementMs ?? 0),
             clock: msg.clock as OnlineMatchInfo["clock"],
             turnStartedAt: Number(msg.turnStartedAt ?? Date.now()),
+            moveHistory: [],
           };
           matchRef.current = match;
           patch({
@@ -105,8 +106,23 @@ export function useOnlineClient() {
           });
           break;
         }
-        case "move":
+        case "move": {
           if (!matchRef.current || msg.gameId !== matchRef.current.gameId) break;
+          const turn = String(msg.turn ?? "w") as "w" | "b";
+          const mover: "w" | "b" = turn === "w" ? "b" : "w";
+          const by =
+            mover === matchRef.current.color ? "user" : "opponent";
+          const ply = matchRef.current.moveHistory.length + 1;
+          const uci = String(msg.uci ?? "");
+          if (uci) {
+            matchRef.current.moveHistory.push({
+              ply,
+              uci,
+              san: msg.san != null ? String(msg.san) : undefined,
+              fen: String(msg.fen),
+              by,
+            });
+          }
           matchRef.current = {
             ...matchRef.current,
             fen: String(msg.fen),
@@ -115,6 +131,7 @@ export function useOnlineClient() {
           };
           patch({ match: { ...matchRef.current } });
           break;
+        }
         case "game_over":
           patch({
             phase: "ended",

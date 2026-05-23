@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCustomisation } from "../../customisation";
 import { useGameClock } from "../../online/useGameClock";
 import type { OnlineClientState } from "../../online/useOnlineClient";
@@ -17,6 +17,11 @@ import {
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import ChessBoardGrid from "./ChessBoardGrid";
 import ChessPiece from "./ChessPiece";
+import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
+import { useGameReview } from "../../hooks/useGameReview";
+import { onlineMovesToRecords } from "../../review/buildGameReview";
+import { onlineResultToReview } from "../../review/types";
+import GameReviewPanel from "../review/GameReviewPanel";
 
 interface OnlineMatchProps {
   client: OnlineClientState;
@@ -70,6 +75,54 @@ export default function OnlineMatch({
     from: Square;
     to: Square;
   } | null>(null);
+
+  const { report, loading, progress, runReview, dismiss } = useGameReview();
+  const reviewEngineRef = useRef<StockfishEngine | null>(null);
+  const reviewStartedRef = useRef(false);
+  const matchStartedAtRef = useRef(match.turnStartedAt);
+
+  useEffect(() => {
+    matchStartedAtRef.current = match.turnStartedAt;
+    reviewStartedRef.current = false;
+  }, [match.gameId, match.turnStartedAt]);
+
+  useEffect(() => {
+    if (client.phase !== "ended" || reviewStartedRef.current) return;
+    const history = match.moveHistory ?? [];
+    if (history.length < 2) return;
+    reviewStartedRef.current = true;
+
+    const engine = createStockfishEngine();
+    reviewEngineRef.current = engine;
+    const timer = setInterval(() => {
+      if (!engine.ready) return;
+      clearInterval(timer);
+      void runReview(engine, {
+        id: match.gameId,
+        mode: "online",
+        opponentLabel: match.opponent.name,
+        userColor,
+        result: onlineResultToReview(client.result, userColor),
+        startedAt: matchStartedAtRef.current,
+        endedAt: Date.now(),
+        moves: onlineMovesToRecords(history),
+      });
+    }, 120);
+
+    return () => {
+      clearInterval(timer);
+      engine.quit();
+      reviewEngineRef.current = null;
+    };
+  }, [
+    client.phase,
+    client.result,
+    match.gameId,
+    match.moveHistory,
+    match.opponent.name,
+    userColor,
+    runReview,
+  ]);
 
   useEffect(() => {
     const next = fromFen(match.fen);
@@ -145,6 +198,13 @@ export default function OnlineMatch({
   const lowTime = myMs < 10_000;
 
   return (
+    <>
+    <GameReviewPanel
+      report={report}
+      loading={loading}
+      progress={progress}
+      onClose={dismiss}
+    />
     <div className="flex w-full max-w-5xl flex-col gap-8 lg:flex-row lg:items-start lg:justify-center">
       <div className="flex flex-col items-center gap-6">
         <div className="flex w-full max-w-[min(92vw,520px)] flex-wrap items-center justify-between gap-3">
@@ -285,13 +345,24 @@ export default function OnlineMatch({
         )}
 
         {client.phase === "ended" && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="mt-6 w-full nav-link rounded-sm px-3 py-2 text-[9px]"
-          >
-            Back to pools
-          </button>
+          <div className="mt-6 flex flex-col gap-2">
+            {(loading || report) && (
+              <p className="font-[family-name:var(--font-body)] text-[10px] text-[rgba(0,229,255,0.55)]">
+                {loading ? "Building full game review…" : "Review ready — scroll the overlay"}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                dismiss();
+                reviewStartedRef.current = false;
+                onBack();
+              }}
+              className="w-full nav-link rounded-sm px-3 py-2 text-[9px]"
+            >
+              Back to pools
+            </button>
+          </div>
         )}
 
         {status.type === "check" && client.phase === "playing" && (
@@ -301,5 +372,6 @@ export default function OnlineMatch({
         )}
       </aside>
     </div>
+    </>
   );
 }

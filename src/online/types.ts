@@ -13,6 +13,14 @@ export interface OnlineClock {
   b: number;
 }
 
+export interface OnlineMoveRecord {
+  ply: number;
+  uci: string;
+  san?: string;
+  fen: string;
+  by: "user" | "opponent";
+}
+
 export interface OnlineMatchInfo {
   gameId: string;
   tc: TimeControlId;
@@ -23,6 +31,7 @@ export interface OnlineMatchInfo {
   incrementMs: number;
   clock: OnlineClock;
   turnStartedAt: number;
+  moveHistory: OnlineMoveRecord[];
 }
 
 export type GameResult =
