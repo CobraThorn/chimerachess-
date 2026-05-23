@@ -3,16 +3,16 @@ import { useEffect, useState } from "react";
 import {
   clearDataEvents,
   exportDataEventsJson,
-  isValidEmail,
+  hasStoredAccount,
   isValidPhone,
   loadAccount,
   logDataEvent,
+  loginByEmail,
   maskEmail,
-  normalizeEmail,
   normalizePhone,
-  registerAccount,
-  signInAccount,
+  registerUser,
   signOut,
+  storedAccountEmail,
   updateAccount,
   EMPTY_CONSENTS,
   type DataConsents,
@@ -94,7 +94,10 @@ function ConsentToggles({
 
 export default function AccountDataSection() {
   const { account, isLoggedIn, eventCount, refresh } = useAccount();
-  const [tab, setTab] = useState<Tab>("register");
+  const [tab, setTab] = useState<Tab>(() =>
+    hasStoredAccount() ? "signin" : "register"
+  );
+  const [authBusy, setAuthBusy] = useState(false);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -138,58 +141,57 @@ export default function AccountDataSection() {
       setPhone(a.phone ?? "");
       setDisplayName(a.displayName);
       setConsents(a.consents);
+    } else if (storedAccountEmail()) {
+      setEmail(storedAccountEmail()!);
     }
   }, [account]);
 
-  const handleRegister = () => {
+  useEffect(() => {
+    if (!isLoggedIn && hasStoredAccount()) setTab("signin");
+  }, [isLoggedIn]);
+
+  const handleRegister = async () => {
     setError(null);
     setSuccess(null);
-    const normEmail = normalizeEmail(email);
-    if (!isValidEmail(normEmail)) {
-      setError("Enter a valid email address.");
-      return;
-    }
     if (phone.trim() && !isValidPhone(phone)) {
       setError("Enter a valid phone number (10+ digits) or leave blank.");
       return;
     }
-    if (!consents.analytics) {
-      setError("Enable gameplay & training data to create an account.");
-      return;
-    }
-    registerAccount({
-      email: normEmail,
+    setAuthBusy(true);
+    const result = await registerUser({
+      email,
       phone: phone.trim() ? normalizePhone(phone) : null,
       displayName: displayName.trim() || "Player",
       consents,
     });
+    setAuthBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
     logDataEvent("sign_up", { analytics: consents.analytics });
     logDataEvent("consent_update", {
       analytics: consents.analytics,
       marketing: consents.marketing,
       research: consents.cognitiveResearch,
     });
-    setSuccess("Account created — data collection active on this device.");
+    setSuccess(result.message);
     refresh();
   };
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     setError(null);
     setSuccess(null);
-    const normEmail = normalizeEmail(email);
-    if (!isValidEmail(normEmail)) {
-      setError("Enter a valid email address.");
+    setAuthBusy(true);
+    const result = await loginByEmail(email);
+    setAuthBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      if (result.error.includes("Register")) setTab("register");
       return;
     }
-    const existing = loadAccount();
-    if (!existing || existing.email !== normEmail) {
-      setError("No account for this email — register first.");
-      setTab("register");
-      return;
-    }
-    signInAccount(normEmail);
     logDataEvent("sign_in");
-    setSuccess("Signed in.");
+    setSuccess(result.message);
     refresh();
   };
 
@@ -301,7 +303,7 @@ export default function AccountDataSection() {
               <button
                 type="button"
                 onClick={() => void handleSyncNow()}
-                disabled={syncing || apiOnline === false}
+                disabled={syncing}
                 className="rounded-sm border border-[rgba(0,229,255,0.35)] px-3 py-1.5 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.12em] text-[rgba(0,229,255,0.85)] disabled:opacity-40"
               >
                 {syncing ? "Syncing…" : "Sync now"}
@@ -359,6 +361,16 @@ export default function AccountDataSection() {
         </motion.div>
       ) : (
         <div className="mt-8">
+          {hasStoredAccount() && storedAccountEmail() && (
+            <div className="mb-6 rounded-sm border border-[rgba(232,197,71,0.2)] bg-[rgba(232,197,71,0.05)] px-4 py-3">
+              <p className="font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.55)]">
+                Welcome back — sign in with{" "}
+                <span className="text-gold-glow">{maskEmail(storedAccountEmail()!)}</span>{" "}
+                to continue. Works on this phone or after you registered on another device
+                (same email).
+              </p>
+            </div>
+          )}
           <div className="mb-6 flex gap-2">
             {(["signin", "register"] as Tab[]).map((t) => (
               <button
@@ -404,11 +416,24 @@ export default function AccountDataSection() {
               )}
               <button
                 type="button"
-                onClick={tab === "signin" ? handleSignIn : handleRegister}
-                className="w-full rounded-sm border border-[rgba(232,197,71,0.35)] py-3 font-[family-name:var(--font-hud)] text-[9px] tracking-[0.2em] text-gold-glow"
+                disabled={authBusy}
+                onClick={() =>
+                  void (tab === "signin" ? handleSignIn() : handleRegister())
+                }
+                className="w-full rounded-sm border border-[rgba(232,197,71,0.35)] py-3 font-[family-name:var(--font-hud)] text-[9px] tracking-[0.2em] text-gold-glow disabled:opacity-50"
               >
-                {tab === "signin" ? "Sign in" : "Create account"}
+                {authBusy
+                  ? "Please wait…"
+                  : tab === "signin"
+                    ? "Sign in"
+                    : "Create account"}
               </button>
+              {tab === "signin" && (
+                <p className="font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.35)]">
+                  Sign-in works offline on this device. With internet, we can restore your
+                  account from the cloud.
+                </p>
+              )}
             </div>
 
             <div className="glass-panel rounded-sm p-6">

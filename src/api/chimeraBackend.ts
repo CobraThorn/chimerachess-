@@ -100,10 +100,10 @@ function accountPayload(account: UserAccount) {
 }
 
 async function parseJsonResponse<T>(res: Response): Promise<T | null> {
-  const ct = res.headers.get("content-type") ?? "";
-  if (!ct.includes("application/json")) return null;
+  const text = await res.text();
+  if (!text.trim()) return null;
   try {
-    return (await res.json()) as T;
+    return JSON.parse(text) as T;
   } catch {
     return null;
   }

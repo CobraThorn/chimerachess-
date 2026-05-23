@@ -99,6 +99,51 @@ async function getStats() {
   };
 }
 
+function normalizeEmail(email) {
+  return String(email ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+/** Find saved account JSON by email (for login on new devices). */
+async function findAccountByEmail(email) {
+  const norm = normalizeEmail(email);
+  if (!norm || !norm.includes("@")) return null;
+
+  const files = await fs.readdir(ACCOUNTS_DIR).catch(() => []);
+  for (const name of files) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const data = JSON.parse(
+        await fs.readFile(path.join(ACCOUNTS_DIR, name), "utf8")
+      );
+      if (normalizeEmail(data.email) === norm) {
+        return data;
+      }
+    } catch {
+      /* skip corrupt file */
+    }
+  }
+  return null;
+}
+
+function publicAccountPayload(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    email: record.email,
+    phone: record.phone ?? null,
+    displayName: record.displayName ?? "Player",
+    createdAt: record.createdAt ?? record.firstSeenAt ?? Date.now(),
+    lastLoginAt: record.lastLoginAt ?? Date.now(),
+    consents: record.consents ?? {
+      analytics: true,
+      marketing: false,
+      cognitiveResearch: false,
+    },
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     send(res, 204, {});
@@ -127,6 +172,26 @@ const server = http.createServer(async (req, res) => {
         service: "chimera-data-api",
         stats,
         online: getOnlineStats(),
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/chimera/login") {
+      await ensureDirs();
+      const body = await readBody(req);
+      const email = normalizeEmail(body.email);
+      if (!email) {
+        send(res, 400, { ok: false, error: "email required" });
+        return;
+      }
+      const found = await findAccountByEmail(email);
+      if (!found) {
+        send(res, 404, { ok: false, error: "Account not found" });
+        return;
+      }
+      send(res, 200, {
+        ok: true,
+        account: publicAccountPayload(found),
       });
       return;
     }
@@ -172,6 +237,7 @@ attachOnlinePlay(server);
 server.listen(PORT, () => {
   console.log(`CHIMERA data API → http://localhost:${PORT}`);
   console.log(`  Health: GET /api/chimera/health`);
+  console.log(`  Login:  POST /api/chimera/login`);
   console.log(`  Sync:   POST /api/chimera/sync`);
   console.log(`  Data:   ${DATA_DIR}`);
 });

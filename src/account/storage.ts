@@ -21,7 +21,15 @@ export function loadAccount(): UserAccount | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as UserAccount;
     if (!parsed?.email || !parsed.id) return null;
-    return parsed;
+    return {
+      ...parsed,
+      isLoggedIn: parsed.isLoggedIn === true,
+      consents: parsed.consents ?? {
+        analytics: false,
+        marketing: false,
+        cognitiveResearch: false,
+      },
+    };
   } catch {
     return null;
   }
