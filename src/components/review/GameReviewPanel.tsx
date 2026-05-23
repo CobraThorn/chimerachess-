@@ -126,11 +126,7 @@ export default function GameReviewPanel({
               </p>
               <div className="mt-6 flex flex-wrap gap-4">
                 <StatRing label="Accuracy" value={`${report.accuracy}%`} accent="cyan" />
-                <StatRing
-                  label="Avg loss"
-                  value={`${report.averageCpLoss}cp`}
-                  accent="gold"
-                />
+                <StatRing label="ACPL" value={`${report.acpl}`} accent="gold" />
                 <StatRing label="Blunders" value={String(report.blunders)} accent="red" />
                 <StatRing label="Mistakes" value={String(report.mistakes)} accent="gold" />
               </div>
@@ -324,13 +320,16 @@ function MoveRow({ move }: { move: GameReviewReport["userMoves"][0] }) {
         <p className="font-[family-name:var(--font-body)] text-sm text-white">
           <span className="text-[rgba(255,255,255,0.35)]">{Math.ceil(move.ply / 2)}.</span>{" "}
           {move.san ?? move.uci}
-          {move.cpLoss > 0 && (
-            <span className="ml-2 text-[rgba(255,160,80,0.8)]">−{move.cpLoss}cp</span>
-          )}
+          <span className="ml-2 text-[rgba(255,160,80,0.8)]">−{move.cpLoss}cp · {move.accuracyPct}%</span>
         </p>
         <p className="mt-0.5 truncate font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.35)]">
           {move.insight}
         </p>
+        {move.position.openFiles.length > 0 && (
+          <p className="mt-0.5 font-[family-name:var(--font-hud)] text-[7px] text-[rgba(210,190,255,0.55)]">
+            Files {move.position.openFiles.join(",")}
+          </p>
+        )}
       </div>
       <span className="shrink-0 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(0,229,255,0.4)]">
         {formatEvalLabel(move.evalAfterWhite)}

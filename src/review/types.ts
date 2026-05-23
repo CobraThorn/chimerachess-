@@ -21,6 +21,8 @@ export interface ReviewMoveAnalysis {
   fenAfter: string;
   grade: MoveGrade;
   cpLoss: number;
+  /** CAPS-style move accuracy 0–100 */
+  accuracyPct: number;
   bestUci: string;
   evalBeforeWhite: number;
   evalAfterWhite: number;
@@ -28,6 +30,29 @@ export interface ReviewMoveAnalysis {
   category: MistakeCategory | null;
   isCritical: boolean;
   insight: string;
+  position: ReviewPositionInsight;
+}
+
+export type HeatKind =
+  | "blunder"
+  | "best"
+  | "open_file"
+  | "blind_spot"
+  | "weak";
+
+export interface SquareHeat {
+  square: number;
+  kind: HeatKind;
+  intensity: number;
+}
+
+export interface ReviewPositionInsight {
+  openFiles: string[];
+  semiOpenFiles: string[];
+  blindSpots: string[];
+  findBestMoveSteps: string[];
+  futureScanHabits: string[];
+  heatSquares: SquareHeat[];
 }
 
 /** One frame in the move-by-move recap (ply 0 = starting position). */
@@ -71,7 +96,9 @@ export interface GameReviewReport {
   durationMs: number;
   totalPlies: number;
   accuracy: number;
+  /** Average centipawn loss (ACPL) — lower is stronger */
   averageCpLoss: number;
+  acpl: number;
   brilliant: number;
   great: number;
   good: number;

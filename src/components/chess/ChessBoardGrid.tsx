@@ -16,6 +16,8 @@ export interface ChessBoardGridProps {
   disabled?: boolean;
   thinkingColor?: Color | null;
   engineHighlight?: { from: Square; to: Square } | null;
+  /** Pastel review heat overlays per square */
+  squareHeats?: Map<number, { fill: string; ring: string }>;
   squareSize?: "default" | "compact";
   showCorners?: boolean;
 }
@@ -46,6 +48,7 @@ export default function ChessBoardGrid({
   disabled = false,
   thinkingColor = null,
   engineHighlight = null,
+  squareHeats,
   squareSize = "default",
   showCorners = true,
 }: ChessBoardGridProps) {
@@ -122,6 +125,7 @@ export default function ChessBoardGrid({
               state.turn === thinkingColor;
             const isEngineFrom = engineHighlight?.from === sq;
             const isEngineTo = engineHighlight?.to === sq;
+            const heat = squareHeats?.get(sq);
             const hidePiece =
               slide && (sq === slide.from || sq === slide.to);
 
@@ -163,6 +167,9 @@ export default function ChessBoardGrid({
                       : "",
                     isEngineTo
                       ? "inset 0 0 0 999px rgba(0,229,255,0.14)"
+                      : "",
+                    heat
+                      ? `inset 0 0 0 999px ${heat.fill}, inset 0 0 0 2px ${heat.ring}`
                       : "",
                   ]
                     .filter(Boolean)

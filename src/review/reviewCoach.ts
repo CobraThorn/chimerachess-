@@ -75,6 +75,15 @@ function buildLocalNote(
         : "Side";
 
   if (ua) {
+    const pos = ua.position;
+    const fileHint =
+      pos.openFiles.length > 0
+        ? ` Open file(s): ${pos.openFiles.join(", ")}.`
+        : "";
+    const blindHint =
+      pos.blindSpots.length > 0
+        ? ` Blind spots: ${pos.blindSpots.slice(0, 3).join(", ")}.`
+        : "";
     const gradeLine =
       ua.grade === "brilliant" || ua.grade === "great"
         ? "Strong choice — you stayed aligned with the engine."
@@ -85,14 +94,15 @@ function buildLocalNote(
       ply,
       title: `${mover}: ${step.san ?? step.uci} (${ua.grade})`,
       explanation:
-        `${gradeLine} Eval after this move: ${evalLabel}. ` +
+        `${gradeLine}${fileHint}${blindHint} Eval after this move: ${evalLabel}. ` +
         (ua.cpLoss > 0
           ? `Engine line ${ua.bestUci} was about ${ua.cpLoss}cp better.`
           : "This matched or nearly matched the top engine continuation."),
       teachingPoint:
-        ua.isCritical
+        ua.position.futureScanHabits[0] ??
+        (ua.isCritical
           ? "Critical moment — pause here in future games and calculate forcing lines before committing."
-          : "Ask: what changed in the position (threats, open files, king exposure)?",
+          : "Ask: what changed in the position (threats, open files, king exposure)?"),
       source: "local",
     };
   }

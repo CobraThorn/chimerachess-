@@ -6,6 +6,12 @@ import { toFen } from "../chess/fen";
 import { evalFromResult, formatEvalLabel } from "../engine/analysis";
 import type { StockfishEngine } from "../engine/stockfish";
 import { getEvaluation, getTopMoves } from "../engine/stockfish";
+import {
+  averageAccuracy,
+  averageCentipawnLoss,
+  cpLossToAccuracy,
+} from "./accuracy";
+import { analyzePositionForReview } from "./positionInsights";
 import { buildRecapSteps, stateAtPly } from "./replay";
 import type {
   EvalPoint,
@@ -17,8 +23,8 @@ import type {
   ReviewProgress,
 } from "./types";
 
-const USER_DEPTH = 12;
-const TIMELINE_DEPTH = 8;
+const USER_DEPTH = 14;
+const TIMELINE_DEPTH = 10;
 const START_FEN = toFen(createInitialState());
 
 function gradeFromCpLoss(cpLoss: number, playedBest: boolean): MoveGrade {
@@ -28,10 +34,6 @@ function gradeFromCpLoss(cpLoss: number, playedBest: boolean): MoveGrade {
   if (cpLoss < 80) return "inaccuracy";
   if (cpLoss < 200) return "mistake";
   return "blunder";
-}
-
-function moveAccuracy(cpLoss: number): number {
-  return Math.max(0, Math.min(100, 100 - cpLoss * 0.11));
 }
 
 function phaseForPly(ply: number): GamePhaseStats["phase"] {
@@ -68,15 +70,15 @@ function resultLabel(result: GameReviewReport["result"], mode: GameReviewInput["
 function buildNarrative(report: Omit<GameReviewReport, "narrative">): string[] {
   const lines: string[] = [];
   lines.push(
-    `You scored ${report.accuracy}% accuracy over ${report.userMoves.length} moves in ${Math.round(report.durationMs / 60000) || 1} min of play.`
+    `You scored ${report.accuracy}% accuracy (ACPL ${report.acpl}) over ${report.userMoves.length} moves.`
   );
   if (report.blunders > 0) {
     lines.push(
-      `${report.blunders} blunder${report.blunders > 1 ? "s" : ""} defined the result — review those moments below.`
+      `${report.blunders} blunder${report.blunders > 1 ? "s" : ""} — tap them in the mistake rail to see heat maps and how to find the best move.`
     );
   } else if (report.mistakes > 0) {
     lines.push(
-      `${report.mistakes} mistake${report.mistakes > 1 ? "s" : ""} cost meaningful eval — tightening those wins more games.`
+      `${report.mistakes} mistake${report.mistakes > 1 ? "s" : ""} — use the recap board overlays to train your scan habits.`
     );
   } else if (report.accuracy >= 85) {
     lines.push("Very clean game. Your decisions stayed close to engine top lines throughout.");
@@ -94,12 +96,11 @@ function buildNarrative(report: Omit<GameReviewReport, "narrative">): string[] {
     );
   }
   if (report.openingLine.trim()) {
-    lines.push(`Opening sequence: ${report.openingLine.slice(0, 80)}${report.openingLine.length > 80 ? "…" : ""}.`);
+    lines.push(`Opening: ${report.openingLine.slice(0, 80)}${report.openingLine.length > 80 ? "…" : ""}.`);
   }
   return lines.slice(0, 6);
 }
 
-/** FEN after `ply` half-moves have been played (0 = start). */
 function fenAfterPly(moves: GameMoveRecord[], ply: number): string {
   const { state } = stateAtPly(moves, ply);
   return toFen(state);
@@ -119,7 +120,7 @@ export async function buildGameReview(
   const userMoveIndices = input.moves
     .map((m, i) => (m.by === "user" ? i : -1))
     .filter((i) => i >= 0);
-  const totalSteps = input.moves.length + userMoveIndices.length + 3;
+  const totalSteps = input.moves.length + userMoveIndices.length * 2 + 4;
   let step = 0;
   const tick = (label: string) => {
     step += 1;
@@ -128,8 +129,7 @@ export async function buildGameReview(
 
   tick("Building evaluation timeline…");
   const evalTimeline: EvalPoint[] = [];
-  const timelineDepth =
-    input.moves.length > 36 ? 6 : TIMELINE_DEPTH;
+  const timelineDepth = input.moves.length > 40 ? 8 : TIMELINE_DEPTH;
 
   for (let ply = 0; ply <= input.moves.length; ply++) {
     const fen = ply === 0 ? START_FEN : fenAfterPly(input.moves, ply);
@@ -145,7 +145,7 @@ export async function buildGameReview(
     }
   }
 
-  tick("Grading your moves…");
+  tick("Deep grading your moves…");
   const userAnalyses: ReviewMoveAnalysis[] = [];
 
   for (let i = 0; i < input.moves.length; i++) {
@@ -155,6 +155,7 @@ export async function buildGameReview(
     const ply = i + 1;
     const fenBefore = fenAfterPly(input.moves, i);
     const fenAfter = fenAfterPly(input.moves, ply);
+    const stateBefore = stateAtPly(input.moves, i).state;
 
     const mistake = await analyzeUserMove(
       engine,
@@ -164,7 +165,8 @@ export async function buildGameReview(
       input.userColor,
       USER_DEPTH
     );
-    const top = await getTopMoves(engine, fenBefore, USER_DEPTH, 1).then((t) => t[0]);
+    const topMoves = await getTopMoves(engine, fenBefore, USER_DEPTH, 3);
+    const top = topMoves[0];
     const evalBefore = await getEvaluation(engine, fenBefore, USER_DEPTH);
     const evalAfter = await getEvaluation(engine, fenAfter, USER_DEPTH);
     const beforeW = evalFromResult(fenBefore, evalBefore).cpWhite;
@@ -172,6 +174,16 @@ export async function buildGameReview(
     const cpLoss = mistake?.cpLoss ?? 0;
     const playedBest = top?.move === m.uci;
     const grade = gradeFromCpLoss(cpLoss, playedBest);
+    const accuracyPct = cpLossToAccuracy(cpLoss);
+
+    const position = analyzePositionForReview(
+      stateBefore,
+      input.userColor,
+      m.uci,
+      top?.move ?? m.uci,
+      cpLoss,
+      grade
+    );
 
     userAnalyses.push({
       ply,
@@ -181,13 +193,15 @@ export async function buildGameReview(
       fenAfter,
       grade,
       cpLoss,
+      accuracyPct,
       bestUci: top?.move ?? m.uci,
       evalBeforeWhite: beforeW,
       evalAfterWhite: afterW,
       swingCp: cpLoss,
       category: (mistake?.category ?? null) as MistakeCategory | null,
-      isCritical: cpLoss >= 120,
+      isCritical: cpLoss >= 100,
       insight: insightFor(grade, cpLoss, top?.move ?? m.uci, m.uci),
+      position,
     });
     tick(`Move ${userAnalyses.length}/${userMoveIndices.length}`);
   }
@@ -202,25 +216,15 @@ export async function buildGameReview(
     else counts.blunders++;
   }
 
-  const accuracy =
-    userAnalyses.length > 0
-      ? Math.round(
-          userAnalyses.reduce((s, u) => s + moveAccuracy(u.cpLoss), 0) /
-            userAnalyses.length
-        )
-      : 100;
-  const averageCpLoss =
-    userAnalyses.length > 0
-      ? Math.round(
-          userAnalyses.reduce((s, u) => s + u.cpLoss, 0) / userAnalyses.length
-        )
-      : 0;
+  const cpLosses = userAnalyses.map((u) => u.cpLoss);
+  const accuracy = averageAccuracy(cpLosses);
+  const acpl = averageCentipawnLoss(cpLosses);
 
   const phaseMap = new Map<GamePhaseStats["phase"], { acc: number[]; worst: number }>();
   for (const u of userAnalyses) {
     const ph = phaseForPly(u.ply);
     const cur = phaseMap.get(ph) ?? { acc: [], worst: 0 };
-    cur.acc.push(moveAccuracy(u.cpLoss));
+    cur.acc.push(u.accuracyPct);
     cur.worst = Math.max(cur.worst, u.cpLoss);
     phaseMap.set(ph, cur);
   }
@@ -239,9 +243,9 @@ export async function buildGameReview(
     });
 
   const criticalMoments = [...userAnalyses]
-    .filter((u) => u.isCritical)
+    .filter((u) => u.isCritical || u.grade === "blunder" || u.grade === "mistake")
     .sort((a, b) => b.cpLoss - a.cpLoss)
-    .slice(0, 5);
+    .slice(0, 8);
 
   const openingLine = input.moves
     .slice(0, 10)
@@ -260,7 +264,8 @@ export async function buildGameReview(
     durationMs: input.endedAt - input.startedAt,
     totalPlies: input.moves.length,
     accuracy,
-    averageCpLoss,
+    averageCpLoss: acpl,
+    acpl,
     ...counts,
     openingLine,
     phases,
@@ -278,7 +283,6 @@ export async function buildGameReview(
   return { ...base, narrative };
 }
 
-/** Convert online move log to game move records */
 export function onlineMovesToRecords(
   history: { uci: string; san?: string; fen: string; by: "user" | "opponent" }[]
 ): GameMoveRecord[] {
