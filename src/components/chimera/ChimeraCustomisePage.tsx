@@ -45,9 +45,16 @@ const ACCENTS: { id: ChimeraAccentId; color: string }[] = [
 
 interface ChimeraCustomisePageProps {
   onComplete: () => void;
+  /** First-time sign-in — cannot dismiss without finishing */
+  required?: boolean;
+  onDismiss?: () => void;
 }
 
-export default function ChimeraCustomisePage({ onComplete }: ChimeraCustomisePageProps) {
+export default function ChimeraCustomisePage({
+  onComplete,
+  required = true,
+  onDismiss,
+}: ChimeraCustomisePageProps) {
   const { setBoardTheme, setPieceSet } = useCustomisation();
   const [step, setStep] = useState(0);
   const [codename, setCodename] = useState("CHIMERA");
@@ -127,6 +134,17 @@ export default function ChimeraCustomisePage({ onComplete }: ChimeraCustomisePag
         <span className="hud-corner hud-corner--tr" />
         <span className="hud-corner hud-corner--bl" />
         <span className="hud-corner hud-corner--br" />
+
+        {!required && onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="absolute right-4 top-4 font-[family-name:var(--font-hud)] text-[10px] tracking-[0.2em] text-[rgba(255,255,255,0.45)] hover:text-white"
+            aria-label="Close setup"
+          >
+            CLOSE
+          </button>
+        )}
 
         <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.4em] text-[rgba(0,229,255,0.55)] uppercase">
           Identity protocol

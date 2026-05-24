@@ -5,18 +5,26 @@ import LandingPage from "./components/LandingPage";
 import ChimeraCustomisePage from "./components/chimera/ChimeraCustomisePage";
 import { CHIMERA_SETUP_EVENT, CHIMERA_OPEN_SETUP_EVENT } from "./chimeraSetup";
 
+type SetupOverlay = false | "required" | "optional";
+
 export default function App() {
-  const [showSetup, setShowSetup] = useState(() => needsChimeraSetup());
+  const [setupOverlay, setSetupOverlay] = useState<SetupOverlay>(() =>
+    needsChimeraSetup() ? "required" : false
+  );
 
   const refreshSetupGate = useCallback(() => {
-    setShowSetup(needsChimeraSetup());
+    if (needsChimeraSetup()) {
+      setSetupOverlay("required");
+    } else {
+      setSetupOverlay((prev) => (prev === "required" ? false : prev));
+    }
   }, []);
 
   useEffect(() => {
     refreshSetupGate();
     const onAccount = () => refreshSetupGate();
     const onSetup = () => refreshSetupGate();
-    const openSetup = () => setShowSetup(true);
+    const openSetup = () => setSetupOverlay("optional");
     window.addEventListener(ACCOUNT_EVENT, onAccount);
     window.addEventListener(CHIMERA_SETUP_EVENT, onSetup);
     window.addEventListener(CHIMERA_OPEN_SETUP_EVENT, openSetup);
@@ -30,8 +38,16 @@ export default function App() {
   return (
     <>
       <LandingPage />
-      {showSetup && (
-        <ChimeraCustomisePage onComplete={() => setShowSetup(false)} />
+      {setupOverlay && (
+        <ChimeraCustomisePage
+          required={setupOverlay === "required"}
+          onComplete={() => setSetupOverlay(false)}
+          onDismiss={
+            setupOverlay === "optional"
+              ? () => setSetupOverlay(false)
+              : undefined
+          }
+        />
       )}
     </>
   );

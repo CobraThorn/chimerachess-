@@ -1,6 +1,6 @@
 import { loadMemory, saveMemory } from "../ai/memory";
 import { CHIMERA_STORAGE_KEY } from "../ai/types";
-import { loadAccount } from "../account/storage";
+import { loadAccount, markChimeraSetupComplete } from "../account/storage";
 import { loadCustomisation, saveCustomisation } from "../customisation/storage";
 import type { CustomisationPrefs } from "../customisation/types";
 import { applyChimeraSetup } from "./applySetup";
@@ -32,6 +32,9 @@ export function applySaveBundle(bundle: ChimeraSaveBundle): void {
   if (bundle.setup) {
     saveChimeraSetup(bundle.setup);
     applyChimeraSetup(bundle.setup);
+    if (bundle.setup.completedAt) {
+      markChimeraSetupComplete();
+    }
   } else if (bundle.memory) {
     try {
       localStorage.setItem(CHIMERA_STORAGE_KEY, JSON.stringify(bundle.memory));
