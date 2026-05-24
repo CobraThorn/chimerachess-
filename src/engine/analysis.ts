@@ -127,13 +127,21 @@ export interface FullAnalysisResult {
   lines: { move: string; cp: number }[];
 }
 
+export type AnalysisGoMode =
+  | { kind: "depth"; depth: number }
+  | { kind: "movetime"; movetimeMs: number };
+
 /** One Stockfish run: live eval + top 3 moves (no overlapping `go` commands). */
 export function runFullAnalysis(
   engine: StockfishEngine,
   fen: string,
-  depth: number,
+  mode: AnalysisGoMode,
   onUpdate: (analysis: LiveAnalysis) => void
 ): { cancel: () => void; done: Promise<FullAnalysisResult> } {
+  const goCmd =
+    mode.kind === "movetime"
+      ? `go movetime ${Math.max(80, Math.round(mode.movetimeMs))}`
+      : `go depth ${mode.depth}`;
   let cancelled = false;
   let primary: LiveAnalysis | null = null;
   const lineMap = new Map<number, { move: string; cp: number }>();
@@ -189,7 +197,7 @@ export function runFullAnalysis(
     engine.stop();
     engine.send("setoption name MultiPV value 3");
     engine.send(`position fen ${fen}`);
-    engine.send(`go depth ${depth}`);
+    engine.send(goCmd);
   });
 
   return {

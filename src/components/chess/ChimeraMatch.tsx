@@ -394,7 +394,7 @@ export default function ChimeraMatch() {
             fenAfter,
             uci,
             userColor,
-            8
+            6
           );
           if (mistake && gameRef.current) {
             gameRef.current.mistakes.push(mistake);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 import { useCustomisation } from "../../customisation";
 import { isLightSquare } from "../../chess";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
@@ -8,6 +8,8 @@ import BoardAnnotations, { type BoardArrow } from "./BoardAnnotations";
 import { MOVE_SLIDE_MS } from "../../chess/movePacing";
 import {
   clientToSquare,
+  DRAG_FOLLOW_SPRING,
+  DRAG_LIFT_SCALE,
   DRAG_START_PX,
   MOVE_PIECE_OPACITY,
   squareToPercent,
@@ -37,15 +39,24 @@ const BOARD_COMPACT_CLASS =
 const LEGAL_TINT = "rgba(120,200,140,0.14)";
 const LEGAL_CAPTURE_TINT = "rgba(255,200,100,0.12)";
 
-const PIECE_SPRING = { type: "spring" as const, stiffness: 420, damping: 32, mass: 0.55 };
-const SQUARE_TRANSITION = { duration: 0.28, ease: [0.22, 0.03, 0.26, 1] as const };
-const SLIDE_EASE = [0.22, 0.03, 0.26, 1] as const;
+const PIECE_SPRING = {
+  type: "spring" as const,
+  stiffness: 160,
+  damping: 20,
+  mass: 0.8,
+};
+const SQUARE_TRANSITION = { duration: 0.38, ease: [0.16, 1, 0.3, 1] as const };
+const SLIDE_SPRING = {
+  type: "spring" as const,
+  stiffness: 52,
+  damping: 11,
+  mass: 1.2,
+};
+const UI_SPRING = { type: "spring" as const, stiffness: 200, damping: 22, mass: 0.65 };
 
-interface DragGhost {
+interface DragMeta {
   color: Color;
   type: PieceType;
-  x: number;
-  y: number;
   size: number;
 }
 
@@ -88,8 +99,21 @@ export default function ChessBoardGrid({
     dragging: boolean;
     armed: boolean;
   } | null>(null);
+  const dragRaf = useRef<number | null>(null);
+  const pendingPointer = useRef<{ clientX: number; clientY: number } | null>(null);
 
-  const [dragGhost, setDragGhost] = useState<DragGhost | null>(null);
+  const ghostX = useMotionValue(0);
+  const ghostY = useMotionValue(0);
+  const ghostScale = useMotionValue(1);
+  const smoothX = useSpring(ghostX, DRAG_FOLLOW_SPRING);
+  const smoothY = useSpring(ghostY, DRAG_FOLLOW_SPRING);
+  const smoothScale = useSpring(ghostScale, {
+    stiffness: 140,
+    damping: 18,
+    mass: 0.7,
+  });
+
+  const [dragMeta, setDragMeta] = useState<DragMeta | null>(null);
   const [dragFromSq, setDragFromSq] = useState<Square | null>(null);
   const [slide, setSlide] = useState<SlideAnim | null>(null);
   const prevMoveKey = useRef<string | null>(null);
@@ -110,40 +134,77 @@ export default function ChessBoardGrid({
       type: landed.type,
       key: Date.now(),
     });
-    const t = window.setTimeout(() => setSlide(null), MOVE_SLIDE_MS + 60);
+    const t = window.setTimeout(() => setSlide(null), MOVE_SLIDE_MS + 80);
     return () => window.clearTimeout(t);
   }, [lastMove, state.board]);
 
-  const updateDragGhost = useCallback((clientX: number, clientY: number) => {
-    const el = boardRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const size = rect.width / 8;
-    setDragGhost((prev) => {
-      const piece = dragSession.current
-        ? state.board[dragSession.current.sq]
-        : prev
-          ? { color: prev.color, type: prev.type }
-          : null;
-      if (!piece) return null;
-      return {
-        color: piece.color,
-        type: piece.type,
-        x: clientX - rect.left - size / 2,
-        y: clientY - rect.top - size / 2,
-        size,
-      };
-    });
-  }, [state.board]);
+  const applyPointerToGhost = useCallback(
+    (clientX: number, clientY: number) => {
+      const el = boardRef.current;
+      const session = dragSession.current;
+      if (!el || !session) return;
+
+      const piece = state.board[session.sq];
+      if (!piece) return;
+
+      const rect = el.getBoundingClientRect();
+      const size = rect.width / 8;
+      const x = clientX - rect.left - size / 2;
+      const y = clientY - rect.top - size / 2;
+
+      ghostX.set(x);
+      ghostY.set(y);
+      setDragMeta({ color: piece.color, type: piece.type, size });
+    },
+    [ghostX, ghostY, state.board]
+  );
+
+  const scheduleGhostUpdate = useCallback(
+    (clientX: number, clientY: number) => {
+      pendingPointer.current = { clientX, clientY };
+      if (dragRaf.current !== null) return;
+
+      dragRaf.current = requestAnimationFrame(() => {
+        dragRaf.current = null;
+        const p = pendingPointer.current;
+        pendingPointer.current = null;
+        if (p) applyPointerToGhost(p.clientX, p.clientY);
+      });
+    },
+    [applyPointerToGhost]
+  );
+
+  const beginDragGhost = useCallback(
+    (clientX: number, clientY: number) => {
+      applyPointerToGhost(clientX, clientY);
+      ghostScale.set(DRAG_LIFT_SCALE);
+      smoothX.jump(ghostX.get());
+      smoothY.jump(ghostY.get());
+      smoothScale.jump(DRAG_LIFT_SCALE);
+    },
+    [applyPointerToGhost, ghostScale, ghostX, ghostY, smoothScale, smoothX, smoothY]
+  );
+
+  const clearDragGhost = useCallback(() => {
+    if (dragRaf.current !== null) {
+      cancelAnimationFrame(dragRaf.current);
+      dragRaf.current = null;
+    }
+    pendingPointer.current = null;
+    ghostScale.set(1);
+    setDragMeta(null);
+  }, [ghostScale]);
 
   const finishPointer = useCallback(
     (clientX: number, clientY: number, fallbackSq: Square) => {
       const session = dragSession.current;
       dragSession.current = null;
-      setDragGhost(null);
-      setDragFromSq(null);
 
-      if (!session || !onSquareClick) return;
+      if (!session || !onSquareClick) {
+        clearDragGhost();
+        setDragFromSq(null);
+        return;
+      }
 
       const el = boardRef.current;
       const dropSq =
@@ -151,13 +212,28 @@ export default function ChessBoardGrid({
           ? clientToSquare(el.getBoundingClientRect(), clientX, clientY, flip)
           : null;
 
+      if (session.dragging && dropSq !== null && el) {
+        const rect = el.getBoundingClientRect();
+        const size = rect.width / 8;
+        const f = dropSq & 7;
+        const r = dropSq >> 3;
+        const vf = flip ? 7 - f : f;
+        const vr = flip ? r : 7 - r;
+        ghostX.set(vf * size);
+        ghostY.set(vr * size);
+        ghostScale.set(1);
+      }
+
+      clearDragGhost();
+      setDragFromSq(null);
+
       if (session.dragging && dropSq !== null) {
         onSquareClick(dropSq);
       } else if (!session.dragging) {
         onSquareClick(fallbackSq);
       }
     },
-    [flip, onSquareClick]
+    [clearDragGhost, flip, ghostScale, ghostX, ghostY, onSquareClick]
   );
 
   const onBoardPointerMove = useCallback(
@@ -173,16 +249,16 @@ export default function ChessBoardGrid({
         session.dragging = true;
         setDragFromSq(session.sq);
         onSquareClick?.(session.sq);
-        updateDragGhost(e.clientX, e.clientY);
+        beginDragGhost(e.clientX, e.clientY);
         return;
       }
 
       if (session.dragging) {
         e.preventDefault();
-        updateDragGhost(e.clientX, e.clientY);
+        scheduleGhostUpdate(e.clientX, e.clientY);
       }
     },
-    [onSquareClick, updateDragGhost]
+    [beginDragGhost, onSquareClick, scheduleGhostUpdate]
   );
 
   const onBoardPointerUp = useCallback(
@@ -317,7 +393,7 @@ export default function ChessBoardGrid({
                     className="pointer-events-none absolute inset-0"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ duration: 0.2 }}
+                    transition={UI_SPRING}
                     style={{ backgroundColor: LEGAL_TINT }}
                     aria-hidden
                   />
@@ -327,7 +403,7 @@ export default function ChessBoardGrid({
                     className="pointer-events-none absolute inset-0"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ duration: 0.2 }}
+                    transition={UI_SPRING}
                     style={{ backgroundColor: LEGAL_CAPTURE_TINT }}
                     aria-hidden
                   />
@@ -359,7 +435,7 @@ export default function ChessBoardGrid({
                     className="pointer-events-none absolute inset-0"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ duration: 0.15 }}
+                    transition={UI_SPRING}
                     style={{ boxShadow: `inset 0 0 0 2px ${boardTheme.selectedRing}` }}
                     aria-hidden
                   />
@@ -369,7 +445,7 @@ export default function ChessBoardGrid({
                     className="relative z-[1] h-[18%] w-[18%] min-h-1.5 min-w-1.5 max-h-2.5 max-w-2.5 rounded-full"
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    transition={PIECE_SPRING}
+                    transition={UI_SPRING}
                     style={{
                       backgroundColor: boardTheme.legalDot,
                       boxShadow: `0 0 6px ${boardTheme.legalDot}`,
@@ -381,7 +457,7 @@ export default function ChessBoardGrid({
                     className="pointer-events-none absolute inset-[14%] z-[1] rounded-full border box-border"
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 0.75 }}
-                    transition={PIECE_SPRING}
+                    transition={UI_SPRING}
                     style={{ borderColor: boardTheme.legalCapture }}
                   />
                 )}
@@ -389,8 +465,8 @@ export default function ChessBoardGrid({
                   <motion.div
                     className="relative z-[2] flex h-[88%] w-[88%] items-center justify-center"
                     animate={{
-                      scale: isSelected ? 1.08 : 1,
-                      opacity: isDragSource ? 0.15 : 1,
+                      scale: isSelected ? 1.06 : isDragSource ? 0.92 : 1,
+                      opacity: isDragSource ? 0.12 : 1,
                     }}
                     transition={PIECE_SPRING}
                   >
@@ -417,7 +493,7 @@ export default function ChessBoardGrid({
         {slide && slideDelta && (
           <motion.div
             key={slide.key}
-            className="pointer-events-none absolute z-30 flex items-center justify-center"
+            className="pointer-events-none absolute z-30 flex items-center justify-center will-change-transform"
             style={{
               left: slideDelta.origin.left,
               top: slideDelta.origin.top,
@@ -427,10 +503,7 @@ export default function ChessBoardGrid({
             }}
             initial={{ x: 0, y: 0 }}
             animate={{ x: slideDelta.x, y: slideDelta.y }}
-            transition={{
-              duration: MOVE_SLIDE_MS / 1000,
-              ease: SLIDE_EASE,
-            }}
+            transition={SLIDE_SPRING}
           >
             <ChessPiece
               color={slide.color}
@@ -440,23 +513,24 @@ export default function ChessBoardGrid({
           </motion.div>
         )}
 
-        {dragGhost && (
-          <div
-            className="pointer-events-none absolute z-40 flex items-center justify-center transition-transform duration-75 ease-out"
+        {dragMeta && (
+          <motion.div
+            className="pointer-events-none absolute left-0 top-0 z-40 flex items-center justify-center will-change-transform"
             style={{
-              left: dragGhost.x,
-              top: dragGhost.y,
-              width: dragGhost.size,
-              height: dragGhost.size,
+              x: smoothX,
+              y: smoothY,
+              width: dragMeta.size,
+              height: dragMeta.size,
+              scale: smoothScale,
               opacity: MOVE_PIECE_OPACITY,
             }}
           >
             <ChessPiece
-              color={dragGhost.color}
-              type={dragGhost.type}
+              color={dragMeta.color}
+              type={dragMeta.type}
               pieceSet={pieceSet}
             />
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

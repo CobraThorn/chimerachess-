@@ -3,9 +3,8 @@ import type { GameMoveRecord } from "../ai/types";
 import type { MistakeCategory } from "../ai/types";
 import { createInitialState } from "../chess/board";
 import { toFen } from "../chess/fen";
-import { evalFromResult, formatEvalLabel } from "../engine/analysis";
 import type { StockfishEngine } from "../engine/stockfish";
-import { getEvaluation } from "../engine/stockfish";
+import { buildEvalTimelineFromGrades } from "./evalTimeline";
 import {
   formatAvgMissPerMove,
   playQualityFromAcpl,
@@ -25,10 +24,9 @@ import { buildRecapSteps, stateAtPly } from "./replay";
 import {
   REVIEW_MOVE_DEPTH,
   REVIEW_MULTIPV,
-  reviewTimelineDepth,
+  REVIEW_START_DEPTH,
 } from "./reviewEngine";
 import type {
-  EvalPoint,
   GamePhaseStats,
   GameReviewInput,
   GameReviewReport,
@@ -97,31 +95,12 @@ export async function buildGameReview(
   const userMoveIndices = input.moves
     .map((m, i) => (m.by === "user" ? i : -1))
     .filter((i) => i >= 0);
-  const totalSteps = input.moves.length + userMoveIndices.length * 2 + 4;
+  const totalSteps = userMoveIndices.length + 4;
   let step = 0;
   const tick = (label: string) => {
     step += 1;
     onProgress?.({ step, total: totalSteps, label });
   };
-
-  tick("Building evaluation graph…");
-  const evalTimeline: EvalPoint[] = [];
-  const timelineDepth = reviewTimelineDepth(input.moves.length);
-
-  for (let ply = 0; ply <= input.moves.length; ply++) {
-    const fen = ply === 0 ? START_FEN : fenAfterPly(input.moves, ply);
-    engine.stop();
-    const evalRes = await getEvaluation(engine, fen, timelineDepth);
-    const { cpWhite } = evalFromResult(fen, evalRes);
-    evalTimeline.push({
-      ply,
-      cpWhite,
-      label: formatEvalLabel(cpWhite, evalRes.isMate, evalRes.mateIn),
-    });
-    if (ply > 0 && ply % 4 === 0) {
-      tick(`Eval ${ply}/${input.moves.length}`);
-    }
-  }
 
   tick("Classifying your moves…");
   const userAnalyses: ReviewMoveAnalysis[] = [];
@@ -252,6 +231,15 @@ export async function buildGameReview(
     .join(" ");
 
   const recapSteps = buildRecapSteps(input.moves);
+
+  tick("Building evaluation graph…");
+  const evalTimeline = await buildEvalTimelineFromGrades(
+    engine,
+    input.moves.length,
+    userAnalyses,
+    START_FEN,
+    REVIEW_START_DEPTH
+  );
 
   const base: Omit<GameReviewReport, "narrative" | "coachSummary"> = {
     id: input.id,

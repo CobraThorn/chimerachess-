@@ -222,6 +222,42 @@ export function configureEngine(
   });
 }
 
+function cpForWhite(fen: string, stmCp: number): number {
+  const stm = fen.split(" ")[1];
+  return stm === "w" ? stmCp : -stmCp;
+}
+
+function parseTopMovesFromOutput(
+  output: string,
+  fen: string,
+  multiPv: number
+): { move: string; cp: number }[] {
+  const results: { move: string; cp: number }[] = [];
+  const lines = output.split("\n");
+  for (let pv = 1; pv <= multiPv; pv++) {
+    const info = [...lines]
+      .reverse()
+      .find((l) => l.includes(`multipv ${pv}`) && l.includes(" pv "));
+    if (!info) continue;
+    const cpM = info.match(/score cp (-?\d+)/);
+    const mateM = info.match(/score mate (-?\d+)/);
+    const pvM = info.match(/\spv\s+(\S+)/);
+    if (!pvM) continue;
+    let stmCp = 0;
+    if (mateM) {
+      const mateIn = parseInt(mateM[1], 10);
+      stmCp = mateIn > 0 ? 100000 - mateIn : -100000 - mateIn;
+    } else if (cpM) {
+      stmCp = parseInt(cpM[1], 10);
+    }
+    results.push({
+      move: pvM[1],
+      cp: cpForWhite(fen, stmCp),
+    });
+  }
+  return results;
+}
+
 export function getEvaluation(
   engine: StockfishEngine,
   fen: string,
@@ -235,36 +271,33 @@ export function getEvaluation(
   });
 }
 
-/** MultiPV: top N moves with scores (centipawns, side to move). */
+/** One search: root eval + top N lines (scores from White's perspective). */
+export function searchPosition(
+  engine: StockfishEngine,
+  fen: string,
+  depth: number,
+  multiPv: number
+): Promise<{ eval: EvalResult; topMoves: { move: string; cp: number }[] }> {
+  return new Promise((resolve) => {
+    engine.send(`setoption name MultiPV value ${multiPv}`);
+    engine.send(`position fen ${fen}`);
+    engine.send(`go depth ${depth}`, (out) => {
+      engine.send(`setoption name MultiPV value 1`);
+      resolve({
+        eval: parseEvalFromOutput(out),
+        topMoves: parseTopMovesFromOutput(out, fen, multiPv),
+      });
+    });
+  });
+}
+
+/** MultiPV: top N moves with scores (centipawns from White's perspective). */
 export function getTopMoves(
   engine: StockfishEngine,
   fen: string,
   depth: number,
   multiPv: number
 ): Promise<{ move: string; cp: number }[]> {
-  return new Promise((resolve) => {
-    engine.send(`setoption name MultiPV value ${multiPv}`);
-    engine.send(`position fen ${fen}`);
-    engine.send(`go depth ${depth}`, (out) => {
-      engine.send(`setoption name MultiPV value 1`);
-      const results: { move: string; cp: number }[] = [];
-      const lines = out.split("\n");
-      for (let pv = 1; pv <= multiPv; pv++) {
-        const info = [...lines]
-          .reverse()
-          .find((l) => l.includes(`multipv ${pv}`) && l.includes(" pv "));
-        if (!info) continue;
-        const cpM = info.match(/score cp (-?\d+)/);
-        const pvM = info.match(/\spv\s+(\S+)/);
-        if (pvM) {
-          results.push({
-            move: pvM[1],
-            cp: cpM ? parseInt(cpM[1], 10) : 0,
-          });
-        }
-      }
-      resolve(results);
-    });
-  });
+  return searchPosition(engine, fen, depth, multiPv).then((r) => r.topMoves);
 }
 

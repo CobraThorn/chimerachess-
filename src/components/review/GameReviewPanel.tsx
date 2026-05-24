@@ -74,7 +74,7 @@ export default function GameReviewPanel({
               Analysing every move…
             </p>
             <p className="mt-2 font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-              {progress?.label ?? `Stockfish depth ${REVIEW_MOVE_DEPTH} — this may take a minute`}
+              {progress?.label ?? `Stockfish depth ${REVIEW_MOVE_DEPTH} — usually under 30s`}
             </p>
             <div className="mx-auto mt-8 h-1 max-w-xs overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
               <div

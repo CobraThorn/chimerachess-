@@ -31,3 +31,13 @@ export function squareToPercent(
 
 export const DRAG_START_PX = 5;
 export const MOVE_PIECE_OPACITY = 0.34;
+
+/** Soft follow while dragging (low stiffness = smooth lag). */
+export const DRAG_FOLLOW_SPRING = {
+  stiffness: 68,
+  damping: 13,
+  mass: 1.05,
+  restDelta: 0.05,
+} as const;
+
+export const DRAG_LIFT_SCALE = 1.07;

@@ -28,10 +28,10 @@ import ChessBoardGrid from "../chess/ChessBoardGrid";
 import ChessPiece from "../chess/ChessPiece";
 
 const DEPTH_PRESETS = [
-  { id: "fast", label: "Fast", depth: 14 },
-  { id: "standard", label: "Standard", depth: 18 },
-  { id: "deep", label: "Deep", depth: 22 },
-  { id: "max", label: "Max", depth: 26 },
+  { id: "fast", label: "Fast", movetimeMs: 180 },
+  { id: "standard", label: "Standard", movetimeMs: 400 },
+  { id: "deep", label: "Deep", depth: 18 },
+  { id: "max", label: "Max", depth: 22 },
 ] as const;
 
 function uciToSanPreview(state: GameState, uci: string): string {
@@ -52,7 +52,7 @@ export default function StockfishAnalysis() {
   } | null>(null);
   const [orientation, setOrientation] = useState<Color>("w");
   const [analysisOn, setAnalysisOn] = useState(true);
-  const [depthPreset, setDepthPreset] = useState(2);
+  const [depthPreset, setDepthPreset] = useState(0);
   const [sfReady, setSfReady] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [live, setLive] = useState<LiveAnalysis | null>(null);
@@ -63,7 +63,12 @@ export default function StockfishAnalysis() {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const depth = DEPTH_PRESETS[depthPreset].depth;
+  const analysisMode = useMemo(() => {
+    const preset = DEPTH_PRESETS[depthPreset];
+    return "movetimeMs" in preset
+      ? ({ kind: "movetime" as const, movetimeMs: preset.movetimeMs })
+      : ({ kind: "depth" as const, depth: preset.depth });
+  }, [depthPreset]);
   const status = useMemo(() => getGameStatus(state), [state]);
   const fen = useMemo(() => toFen(state), [state]);
   const gameOver =
@@ -104,7 +109,7 @@ export default function StockfishAnalysis() {
     const { cancel, done } = runFullAnalysis(
       engine,
       targetFen,
-      depth,
+      analysisMode,
       (update) => {
         if (toFen(stateRef.current) === targetFen) {
           setLive(update);
@@ -128,13 +133,13 @@ export default function StockfishAnalysis() {
         setThinking(false);
       }
     }
-  }, [analysisOn, depth, gameOver]);
+  }, [analysisOn, analysisMode, gameOver]);
 
   useEffect(() => {
     if (!sfReady) return;
     const debounce = window.setTimeout(() => {
       void runEngine();
-    }, 280);
+    }, 100);
     return () => {
       clearTimeout(debounce);
       cancelRef.current?.();
