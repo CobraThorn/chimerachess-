@@ -15,7 +15,7 @@ export default function ChessGame() {
           Play CHIMERA
         </h2>
         <p className="mt-2 max-w-lg font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.4)]">
-          Play CHIMERA, match humans online (bullet, blitz, rapid), or watch mirror duels.
+          Unrated practice, rated clocks vs CHIMERA, human matchmaking, or mirror duels.
         </p>
       </div>
       <PlayArena />

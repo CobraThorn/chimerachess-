@@ -13,11 +13,11 @@ export interface NavItem {
 }
 
 export const PLAY_MENU: NavDropdownItem[] = [
-  { label: "Quick Match", description: "Instant pairing", href: "#play-quick" },
-  { label: "Ranked", description: "Elo on the line", href: "#play-ranked", badge: "LIVE" },
-  { label: "Blitz", href: "#play-blitz", description: "3+2 online pool" },
-  { label: "Bullet", href: "#play-bullet", description: "1+0 online pool" },
-  { label: "Rapid", href: "#play-rapid", description: "10+5 online pool" },
+  { label: "Quick Match", description: "Blitz rated now", href: "#play-blitz" },
+  { label: "Ranked", description: "Timed vs CHIMERA · CRS", href: "#play-ranked", badge: "LIVE" },
+  { label: "Blitz", href: "#play-blitz", description: "3+2 rated clocks" },
+  { label: "Bullet", href: "#play-bullet", description: "1+0 rated clocks" },
+  { label: "Rapid", href: "#play-rapid", description: "10+5 rated clocks" },
   { label: "Classical", href: "#play-classical" },
   { label: "AI Match", description: "Neural opponent", href: "#play" },
   { label: "Custom Game", href: "#play-custom" },

@@ -153,14 +153,10 @@ export default function AccountDataSection() {
   const handleRegister = async () => {
     setError(null);
     setSuccess(null);
-    if (phone.trim() && !isValidPhone(phone)) {
-      setError("Enter a valid phone number (10+ digits) or leave blank.");
-      return;
-    }
     setAuthBusy(true);
     const result = await registerUser({
       email,
-      phone: phone.trim() ? normalizePhone(phone) : null,
+      phone: null,
       displayName: displayName.trim() || "Player",
       consents,
     });
@@ -246,8 +242,7 @@ export default function AccountDataSection() {
         Your account
       </h3>
       <p className="mt-2 max-w-2xl font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-        Sign in with email and optional phone to save progress and sync your
-        games across devices.
+        Sign in with email to save progress and sync your games across devices.
       </p>
 
       {error && (
@@ -397,14 +392,6 @@ export default function AccountDataSection() {
                 type="email"
                 placeholder="you@example.com"
                 required
-              />
-              <Field
-                label="Phone"
-                value={phone}
-                onChange={setPhone}
-                type="tel"
-                placeholder="+1 555 000 0000"
-                hint="Optional"
               />
               {tab === "register" && (
                 <Field

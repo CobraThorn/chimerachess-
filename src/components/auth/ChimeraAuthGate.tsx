@@ -6,10 +6,8 @@ import {
   logDataEvent,
   loginByEmail,
   maskEmail,
-  normalizePhone,
   registerUser,
   storedAccountEmail,
-  isValidPhone,
   type DataConsents,
 } from "../../account";
 import { friendlyCloudError } from "../../utils/userFacingError";
@@ -108,7 +106,6 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
   );
   const [authBusy, setAuthBusy] = useState(false);
   const [email, setEmail] = useState(() => storedAccountEmail() ?? "");
-  const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [consents, setConsents] = useState<DataConsents>({ ...EMPTY_CONSENTS });
   const [error, setError] = useState<string | null>(null);
@@ -122,14 +119,10 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
 
   const handleRegister = async () => {
     setError(null);
-    if (phone.trim() && !isValidPhone(phone)) {
-      setError("Enter a valid phone number (10+ digits) or leave blank.");
-      return;
-    }
     setAuthBusy(true);
     const result = await registerUser({
       email,
-      phone: phone.trim() ? normalizePhone(phone) : null,
+      phone: null,
       displayName: displayName.trim() || "Player",
       consents,
     });
@@ -211,14 +204,6 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
             type="email"
             placeholder="you@example.com"
             required
-          />
-          <Field
-            label="Phone"
-            value={phone}
-            onChange={setPhone}
-            type="tel"
-            placeholder="+1 555 000 0000"
-            hint="Optional"
           />
           {tab === "register" && (
             <Field
