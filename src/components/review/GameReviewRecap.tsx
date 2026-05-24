@@ -4,11 +4,10 @@ import { isPositiveGrade, MOVE_GRADE_META } from "../../review/moveGrades";
 import { stateAtPly } from "../../review/replay";
 import type { GameReviewReport, MoveGrade, ReviewCoachNote } from "../../review/types";
 import { uciToMove } from "../../chess";
-import BoardAnnotations, { type BoardArrow } from "../chess/BoardAnnotations";
+import type { BoardArrow } from "../chess/BoardAnnotations";
 import ChessBoardGrid from "../chess/ChessBoardGrid";
 import EvalBar from "../analyze/EvalBar";
-
-const REVIEW_DEPTH = 14;
+import { REVIEW_MOVE_DEPTH } from "../../review/reviewEngine";
 
 interface GameReviewRecapProps {
   report: GameReviewReport;
@@ -44,9 +43,24 @@ export default function GameReviewRecap({
   }, [ply, onEnsureNote]);
 
   const userMove = report.userMoves.find((u) => u.ply === ply);
-  const boardState = useMemo(() => stateAtPly(report.moves, ply), [report.moves, ply]);
+
+  /** Show position *before* the user's move so best/played arrows line up with pieces. */
+  const boardState = useMemo(() => {
+    if (userMove) {
+      return stateAtPly(report.moves, Math.max(0, userMove.ply - 1));
+    }
+    return stateAtPly(report.moves, ply);
+  }, [report.moves, ply, userMove]);
   const step = report.recapSteps[ply];
-  const evalPt = report.evalTimeline[ply] ?? report.evalTimeline[report.evalTimeline.length - 1];
+  const evalPt = useMemo(() => {
+    if (userMove) {
+      return (
+        report.evalTimeline[Math.max(0, userMove.ply - 1)] ??
+        report.evalTimeline[report.evalTimeline.length - 1]
+      );
+    }
+    return report.evalTimeline[ply] ?? report.evalTimeline[report.evalTimeline.length - 1];
+  }, [userMove, ply, report.evalTimeline]);
   const note = notes.get(ply);
 
   const arrows = useMemo((): BoardArrow[] => {
@@ -94,7 +108,7 @@ export default function GameReviewRecap({
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
-            Game review · depth {REVIEW_DEPTH}
+            Game review · depth {report.analysisDepth ?? REVIEW_MOVE_DEPTH}
           </p>
           <p className="mt-1 font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.4)]">
             Green arrow = best move · Red = your move · {gptEnabled ? "AI coach" : "Local coach"}
@@ -152,25 +166,27 @@ export default function GameReviewRecap({
               label={evalPt?.label ?? formatEvalLabel(0)}
               boardSize="min(calc(100vw - 3.5rem), 22rem)"
             />
-            <div className="relative w-[min(calc(100vw-3.5rem),22rem)] min-w-[220px] shrink-0">
+            <div className="w-[min(calc(100vw-3.5rem),22rem)] min-w-[220px] shrink-0">
               <ChessBoardGrid
                 state={boardState.state}
                 orientation={report.userColor}
-                lastMove={boardState.lastMove}
+                lastMove={userMove ? null : boardState.lastMove}
+                arrows={arrows}
                 disabled
                 showCorners={false}
-              />
-              <BoardAnnotations
-                orientation={report.userColor}
-                arrows={arrows}
-                showArrows={arrows.length > 0}
               />
             </div>
           </div>
 
+          {userMove && (
+            <p className="mt-2 text-center font-[family-name:var(--font-hud)] text-[7px] tracking-[0.2em] text-[rgba(255,255,255,0.35)] uppercase">
+              Position before your move
+            </p>
+          )}
+
           {userMove && gradeMeta && (
             <div
-              className={`mt-4 rounded-sm border px-4 py-3 text-center ${gradeMeta.borderClass} ${gradeMeta.bgClass}`}
+              className={`mt-2 rounded-sm border px-4 py-3 text-center ${gradeMeta.borderClass} ${gradeMeta.bgClass}`}
             >
               <p className={`font-[family-name:var(--font-display)] text-xl ${gradeMeta.textClass}`}>
                 {gradeMeta.name}

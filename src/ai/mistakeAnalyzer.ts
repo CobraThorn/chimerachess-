@@ -51,7 +51,7 @@ export async function computeUserMoveCpLoss(
   const userBefore = userCpFromWhite(before.cpWhite, userColor);
 
   engine.stop();
-  const topMoves = await getTopMoves(engine, fenBefore, Math.min(depth, 16), 3);
+  const topMoves = await getTopMoves(engine, fenBefore, depth, 3);
   const top = topMoves[0];
   const second = topMoves[1];
 

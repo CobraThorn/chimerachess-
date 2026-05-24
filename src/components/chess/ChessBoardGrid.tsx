@@ -4,6 +4,7 @@ import { useCustomisation } from "../../customisation";
 import { isLightSquare } from "../../chess";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import ChessPiece from "./ChessPiece";
+import BoardAnnotations, { type BoardArrow } from "./BoardAnnotations";
 import { MOVE_SLIDE_MS } from "../../chess/movePacing";
 
 export interface ChessBoardGridProps {
@@ -16,6 +17,8 @@ export interface ChessBoardGridProps {
   disabled?: boolean;
   thinkingColor?: Color | null;
   engineHighlight?: { from: Square; to: Square } | null;
+  /** Review / analysis arrows (aligned to the 8×8 grid) */
+  arrows?: BoardArrow[];
   /** Pastel review heat overlays per square */
   squareHeats?: Map<number, { fill: string; ring: string }>;
   squareSize?: "default" | "compact";
@@ -48,6 +51,7 @@ export default function ChessBoardGrid({
   disabled = false,
   thinkingColor = null,
   engineHighlight = null,
+  arrows,
   squareHeats,
   squareSize = "default",
   showCorners = true,
@@ -213,6 +217,14 @@ export default function ChessBoardGrid({
             );
           })}
         </div>
+
+        {arrows && arrows.length > 0 && (
+          <BoardAnnotations
+            orientation={orientation}
+            arrows={arrows}
+            showArrows
+          />
+        )}
 
         {slide && (
           <motion.div

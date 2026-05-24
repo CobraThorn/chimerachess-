@@ -28,9 +28,10 @@ import ChessBoardGrid from "../chess/ChessBoardGrid";
 import ChessPiece from "../chess/ChessPiece";
 
 const DEPTH_PRESETS = [
-  { id: "fast", label: "Fast", depth: 12 },
-  { id: "standard", label: "Standard", depth: 16 },
-  { id: "deep", label: "Deep", depth: 20 },
+  { id: "fast", label: "Fast", depth: 14 },
+  { id: "standard", label: "Standard", depth: 18 },
+  { id: "deep", label: "Deep", depth: 22 },
+  { id: "max", label: "Max", depth: 26 },
 ] as const;
 
 function uciToSanPreview(state: GameState, uci: string): string {
@@ -51,7 +52,7 @@ export default function StockfishAnalysis() {
   } | null>(null);
   const [orientation, setOrientation] = useState<Color>("w");
   const [analysisOn, setAnalysisOn] = useState(true);
-  const [depthPreset, setDepthPreset] = useState(1);
+  const [depthPreset, setDepthPreset] = useState(2);
   const [sfReady, setSfReady] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [live, setLive] = useState<LiveAnalysis | null>(null);
@@ -291,7 +292,7 @@ export default function StockfishAnalysis() {
                 boardSize="min(calc(100vw - 3.5rem), 32rem)"
               />
             )}
-            <div className="relative w-[min(calc(100vw-3.5rem),32rem)] min-w-[260px] shrink-0 max-lg:mx-auto">
+            <div className="w-[min(calc(100vw-3.5rem),32rem)] min-w-[260px] shrink-0 max-lg:mx-auto">
               <ChessBoardGrid
                 state={state}
                 orientation={orientation}
@@ -300,6 +301,11 @@ export default function StockfishAnalysis() {
                 lastMove={lastMove}
                 onSquareClick={onSquareClick}
                 engineHighlight={engineHighlight}
+                arrows={
+                  engineHighlight
+                    ? [{ from: engineHighlight.from, to: engineHighlight.to, color: "green" }]
+                    : undefined
+                }
               />
             <AnimatePresence>
               {promotionPick && (

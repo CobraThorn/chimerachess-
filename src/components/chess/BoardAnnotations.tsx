@@ -72,12 +72,12 @@ export default function BoardAnnotations({
 
   return (
     <div
-      className="pointer-events-none absolute inset-2 grid grid-cols-8 grid-rows-8 gap-0"
+      className="pointer-events-none absolute inset-0 z-10"
       aria-hidden
     >
-      {showHeatMap &&
-        heatMap &&
-        Array.from({ length: 64 }, (_, visualIndex) => {
+      {showHeatMap && heatMap && (
+      <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 gap-0">
+        {Array.from({ length: 64 }, (_, visualIndex) => {
           const vr = Math.floor(visualIndex / 8);
           const vf = visualIndex % 8;
           const sq = displayRank(vr) * 8 + displayFile(vf);
@@ -90,6 +90,8 @@ export default function BoardAnnotations({
             />
           );
         })}
+      </div>
+      )}
 
       {showArrows && arrows.length > 0 && (
         <svg
@@ -138,7 +140,8 @@ export default function BoardAnnotations({
                 x2={x2}
                 y2={y2}
                 stroke={stroke}
-                strokeWidth="1.1"
+                strokeWidth="1.35"
+                strokeLinecap="round"
                 markerEnd={`url(#arrowhead-${arrow.color})`}
               />
             );

@@ -114,6 +114,9 @@ export interface GameReviewReport {
   mistakes: number;
   misses: number;
   blunders: number;
+  /** Stockfish depth used for move classification */
+  analysisDepth: number;
+  analysisMultipv: number;
   openingLine: string;
   phases: GamePhaseStats[];
   evalTimeline: EvalPoint[];

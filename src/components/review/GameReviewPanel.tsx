@@ -4,6 +4,7 @@ import { useReviewCoach } from "../../hooks/useReviewCoach";
 import { formatEvalLabel } from "../../engine/analysis";
 import { cpToPawns, missSizeWord } from "../../review/metricsDisplay";
 import { MOVE_GRADE_META } from "../../review/moveGrades";
+import { REVIEW_MOVE_DEPTH } from "../../review/reviewEngine";
 import type { GameReviewReport, ReviewProgress } from "../../review/types";
 import GameReviewRecap from "./GameReviewRecap";
 
@@ -73,7 +74,7 @@ export default function GameReviewPanel({
               Analysing every move…
             </p>
             <p className="mt-2 font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-              {progress?.label ?? "Stockfish deep pass"}
+              {progress?.label ?? `Stockfish depth ${REVIEW_MOVE_DEPTH} — this may take a minute`}
             </p>
             <div className="mx-auto mt-8 h-1 max-w-xs overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
               <div

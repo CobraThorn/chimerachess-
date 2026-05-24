@@ -22,6 +22,11 @@ import {
 } from "./classifyMove";
 import { analyzePositionForReview } from "./positionInsights";
 import { buildRecapSteps, stateAtPly } from "./replay";
+import {
+  REVIEW_MOVE_DEPTH,
+  REVIEW_MULTIPV,
+  reviewTimelineDepth,
+} from "./reviewEngine";
 import type {
   EvalPoint,
   GamePhaseStats,
@@ -31,8 +36,6 @@ import type {
   ReviewProgress,
 } from "./types";
 
-const USER_DEPTH = 14;
-const TIMELINE_DEPTH = 12;
 const START_FEN = toFen(createInitialState());
 
 function phaseForPly(ply: number): GamePhaseStats["phase"] {
@@ -103,7 +106,7 @@ export async function buildGameReview(
 
   tick("Building evaluation graph…");
   const evalTimeline: EvalPoint[] = [];
-  const timelineDepth = input.moves.length > 50 ? 10 : TIMELINE_DEPTH;
+  const timelineDepth = reviewTimelineDepth(input.moves.length);
 
   for (let ply = 0; ply <= input.moves.length; ply++) {
     const fen = ply === 0 ? START_FEN : fenAfterPly(input.moves, ply);
@@ -138,7 +141,7 @@ export async function buildGameReview(
       fenAfter,
       m.uci,
       input.userColor,
-      USER_DEPTH
+      REVIEW_MOVE_DEPTH
     );
     const cpLoss = graded?.cpLoss ?? 0;
     const playedBest = graded?.playedBest ?? false;
@@ -265,6 +268,8 @@ export async function buildGameReview(
     playQuality: quality.label,
     avgMissLabel: formatAvgMissPerMove(acpl),
     ...counts,
+    analysisDepth: REVIEW_MOVE_DEPTH,
+    analysisMultipv: REVIEW_MULTIPV,
     openingLine,
     phases,
     evalTimeline,
