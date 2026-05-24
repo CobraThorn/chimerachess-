@@ -524,9 +524,18 @@ export default function ChimeraMatch() {
     });
   }, []);
 
+  const reviewOpen =
+    !!reviewInput || loading || !!report || !!reviewError;
+
+  /** Skip CRS modal when review takes over; clear so it does not reappear after close. */
+  useEffect(() => {
+    if (!reviewOpen || !memory.crs?.lastPostGame) return;
+    dismissCrsPostGame();
+  }, [reviewOpen, memory.crs?.lastPostGame, dismissCrsPostGame]);
+
   return (
     <>
-    {crsPostGame && (
+    {crsPostGame && !reviewOpen && (
       <CrsPostGamePanel
         summary={crsPostGame}
         onContinue={dismissCrsPostGame}
@@ -537,7 +546,7 @@ export default function ChimeraMatch() {
       loading={loading}
       progress={progress}
       error={reviewError}
-      open={!!reviewInput || loading || !!report || !!reviewError}
+      open={reviewOpen}
       memory={memory}
       storedGame={lastStoredGame}
       onClose={() => {

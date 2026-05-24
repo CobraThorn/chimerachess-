@@ -8,6 +8,8 @@ import { MOVE_SLIDE_MS } from "../../chess/movePacing";
 import MoveGlidePiece from "./MoveGlidePiece";
 import {
   clientToSquare,
+  DRAG_DROP_EASE,
+  DRAG_DROP_SNAP_MS,
   DRAG_LIFT_SCALE,
   DRAG_START_PX,
   LAST_MOVE_FROM_OPACITY,
@@ -199,8 +201,8 @@ export default function ChessBoardGrid({
         positionGhost(center.x, center.y);
         const ghost = ghostRef.current;
         if (ghost) {
-          ghost.style.transition = "transform 90ms cubic-bezier(0.33, 0, 0.1, 1)";
-          window.setTimeout(commit, 92);
+          ghost.style.transition = `transform ${DRAG_DROP_SNAP_MS}ms ${DRAG_DROP_EASE}`;
+          window.setTimeout(commit, DRAG_DROP_SNAP_MS + 8);
           return;
         }
       }
@@ -482,7 +484,7 @@ export default function ChessBoardGrid({
           aria-hidden
           className={[
             "pointer-events-none absolute left-0 top-0 z-40 flex h-0 w-0 items-center justify-center",
-            "will-change-transform",
+            "will-change-transform opacity-95",
             dragPiece ? "visible" : "invisible",
           ].join(" ")}
         >

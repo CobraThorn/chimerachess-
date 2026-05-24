@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { formatEvalLabel, evalToBarPercent } from "../../engine/analysis";
 import { isPositiveGrade, MOVE_GRADE_META } from "../../review/moveGrades";
@@ -180,7 +181,13 @@ export default function GameReviewRecap({
               label={evalPt?.label ?? formatEvalLabel(0)}
               boardSize="min(calc(100vw - 3.5rem), 22rem)"
             />
-            <div className="w-[min(calc(100vw-3.5rem),22rem)] min-w-[220px] shrink-0">
+            <motion.div
+              key={activePly}
+              className="w-[min(calc(100vw-3.5rem),22rem)] min-w-[220px] shrink-0"
+              initial={{ opacity: 0.72 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+            >
               <ChessBoardGrid
                 state={boardState.state}
                 orientation={report.userColor}
@@ -189,7 +196,7 @@ export default function GameReviewRecap({
                 disabled
                 showCorners={false}
               />
-            </div>
+            </motion.div>
           </div>
 
           {userMove && (

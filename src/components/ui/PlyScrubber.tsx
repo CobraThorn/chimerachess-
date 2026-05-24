@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface PlyScrubberProps {
   min: number;
@@ -16,7 +16,7 @@ export interface PlyScrubberProps {
 }
 
 /**
- * Pointer-captured ply scrubber — smoother than native range inputs on touch/desktop.
+ * Pointer-captured ply scrubber — rAF-throttled preview, no CSS lag while dragging.
  */
 export default function PlyScrubber({
   min,
@@ -33,11 +33,14 @@ export default function PlyScrubber({
 }: PlyScrubberProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const rafId = useRef(0);
+  const pendingX = useRef<number | null>(null);
   const [dragValue, setDragValue] = useState<number | null>(null);
 
   const display = dragValue ?? value;
   const span = Math.max(1, max - min);
   const percent = ((display - min) / span) * 100;
+  const isDragging = dragValue !== null;
 
   const valueFromClientX = useCallback(
     (clientX: number) => {
@@ -52,19 +55,43 @@ export default function PlyScrubber({
   );
 
   const applyAt = useCallback(
-    (clientX: number, commit: boolean) => {
+    (clientX: number) => {
       const next = valueFromClientX(clientX);
       setDragValue(next);
       onPreview?.(next);
-      if (commit) onChange(next);
     },
-    [onChange, onPreview, valueFromClientX]
+    [onPreview, valueFromClientX]
+  );
+
+  const scheduleApply = useCallback(
+    (clientX: number) => {
+      pendingX.current = clientX;
+      if (rafId.current) return;
+      rafId.current = requestAnimationFrame(() => {
+        rafId.current = 0;
+        const x = pendingX.current;
+        if (x != null) applyAt(x);
+      });
+    },
+    [applyAt]
+  );
+
+  useEffect(
+    () => () => {
+      if (rafId.current) cancelAnimationFrame(rafId.current);
+    },
+    []
   );
 
   const endScrub = useCallback(
     (clientX: number) => {
       if (!dragging.current) return;
       dragging.current = false;
+      pendingX.current = null;
+      if (rafId.current) {
+        cancelAnimationFrame(rafId.current);
+        rafId.current = 0;
+      }
       const next = valueFromClientX(clientX);
       setDragValue(null);
       onChange(next);
@@ -79,12 +106,12 @@ export default function PlyScrubber({
     dragging.current = true;
     onScrubStart?.();
     e.currentTarget.setPointerCapture(e.pointerId);
-    applyAt(e.clientX, false);
+    applyAt(e.clientX);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragging.current) return;
-    applyAt(e.clientX, false);
+    scheduleApply(e.clientX);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -131,11 +158,15 @@ export default function PlyScrubber({
     >
       <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-[rgba(255,255,255,0.08)]" />
       <div
-        className={`pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full transition-[width] duration-75 ease-out ${fillClassName}`}
+        className={`pointer-events-none absolute inset-y-0 left-0 top-1/2 h-1 -translate-y-1/2 rounded-full will-change-[width] ${fillClassName} ${
+          isDragging ? "" : "transition-[width] duration-100 ease-out"
+        }`}
         style={{ width: `${percent}%` }}
       />
       <div
-        className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border will-change-[left] ${thumbClassName}`}
+        className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border will-change-transform ${thumbClassName} ${
+          isDragging ? "" : "transition-[left] duration-100 ease-out"
+        }`}
         style={{ left: `${percent}%` }}
       />
     </div>

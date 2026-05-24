@@ -77,7 +77,9 @@ export function lastMoveSquareTint(themeLastMove: string, alpha: number): string
 }
 
 /** Chess.com-style move glide (~160ms ease-out). */
-export const MOVE_GLIDE_MS = 160;
-export const MOVE_GLIDE_EASE = "cubic-bezier(0.33, 0, 0.1, 1)";
+export const MOVE_GLIDE_MS = 180;
+export const MOVE_GLIDE_EASE = "cubic-bezier(0.25, 0.1, 0.25, 1)";
 
-export const DRAG_LIFT_SCALE = 1.04;
+export const DRAG_LIFT_SCALE = 1.05;
+export const DRAG_DROP_SNAP_MS = 110;
+export const DRAG_DROP_EASE = "cubic-bezier(0.25, 0.1, 0.25, 1)";

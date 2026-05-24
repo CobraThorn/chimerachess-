@@ -80,11 +80,14 @@ export default function GameReviewPanel({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[rgba(3,3,8,0.92)] p-4 pt-8 pb-16 backdrop-blur-sm"
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[rgba(3,3,8,0.92)] p-4 pt-8 pb-16 backdrop-blur-md"
     >
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
+        initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
         className="glass-panel relative w-full max-w-6xl rounded-sm p-6 md:p-10"
       >
         <span className="hud-corner hud-corner--tl" />
@@ -123,9 +126,11 @@ export default function GameReviewPanel({
                   : "Preparing engine…")}
             </p>
             <div className="mx-auto mt-8 h-1 max-w-xs overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
-              <div
-                className="h-full bg-[rgba(0,229,255,0.5)] transition-all duration-300"
-                style={{ width: `${pct}%` }}
+              <motion.div
+                className="h-full bg-[rgba(0,229,255,0.5)]"
+                initial={false}
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
               />
             </div>
             <p className="mt-2 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.3)]">
@@ -135,7 +140,11 @@ export default function GameReviewPanel({
         )}
 
         {report && !loading && (
-          <>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          >
             <header className="border-b border-[rgba(232,197,71,0.12)] pb-6">
               <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
                 Post-game report · {report.mode === "online" ? "Online" : "vs CHIMERA"}
@@ -264,7 +273,7 @@ export default function GameReviewPanel({
                 Close review
               </button>
             </div>
-          </>
+          </motion.div>
         )}
       </motion.div>
     </motion.div>
