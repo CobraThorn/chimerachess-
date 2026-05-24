@@ -48,6 +48,7 @@ import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
 import { createUserMoveClock } from "../../chess/userMoveClock";
 import { loadChimeraSetup } from "../../chimeraSetup/storage";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
+import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
 import type { GameReviewInput } from "../../review/types";
@@ -203,7 +204,10 @@ export default function ChimeraMatch() {
     const timer = setInterval(() => {
       if (cancelled || !engine.ready) return;
       clearInterval(timer);
-      void runReview(engine, reviewInput);
+      void (async () => {
+        const torch = await acquireSharedTorch();
+        if (!cancelled) void runReview(engine, reviewInput, torch);
+      })();
     }, 120);
 
     return () => {

@@ -148,6 +148,7 @@ export default function GameReviewPanel({
             <header className="border-b border-[rgba(232,197,71,0.12)] pb-6">
               <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
                 Post-game report · {report.mode === "online" ? "Online" : "vs CHIMERA"}
+                {report.torchUsed ? " · Stockfish + Torch 4" : " · Stockfish"}
               </p>
               <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl text-gold-glow">
                 {report.resultLabel}

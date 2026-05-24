@@ -17,6 +17,7 @@ import {
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import ChessBoardGrid from "./ChessBoardGrid";
 import ChessPiece from "./ChessPiece";
+import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
 import { finishGame, loadMemory, saveMemory } from "../../ai";
@@ -150,7 +151,10 @@ export default function OnlineMatch({
     const timer = setInterval(() => {
       if (cancelled || !engine.ready) return;
       clearInterval(timer);
-      void runReview(engine, reviewInput);
+      void (async () => {
+        const torch = await acquireSharedTorch();
+        if (!cancelled) void runReview(engine, reviewInput, torch);
+      })();
     }, 120);
 
     return () => {

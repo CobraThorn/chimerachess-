@@ -2,6 +2,7 @@ import type { GameState } from "../chess";
 import { getAllLegalMoves } from "../chess";
 import { toFen } from "../chess/fen";
 import { moveToUci, uciToMove } from "../chess/uci";
+import { acquireSharedTorch } from "../engine/enginePool";
 import type { StockfishEngine } from "../engine/stockfish";
 import {
   configureEngine,
@@ -39,6 +40,24 @@ function pickRandom<T>(arr: T[]): T | null {
 export interface ChimeraMoveOptions {
   mirror?: boolean;
   archetype?: CognitiveIdentity;
+}
+
+async function preferTorchLineWhenStrong(
+  state: GameState,
+  fen: string,
+  stockfishUci: string,
+  targetElo: number,
+  depth: number
+): Promise<string> {
+  if (!stockfishUci || targetElo < 2400) return stockfishUci;
+  const torch = await acquireSharedTorch();
+  if (!torch) return stockfishUci;
+
+  torch.stop();
+  const torchUci = await getBestMove(torch, fen, Math.min(20, depth + 1));
+  if (!torchUci || torchUci === stockfishUci) return stockfishUci;
+  if (!uciToMove(state, torchUci)) return stockfishUci;
+  return torchUci;
 }
 
 export async function getChimeraMove(
@@ -144,7 +163,9 @@ export async function getChimeraMove(
   if (targetElo >= 2200) {
     const depth = chimeraSearchDepth(targetElo, baseDepth);
     const best = await getBestMove(engine, fen, depth);
-    if (best) return best;
+    if (best) {
+      return preferTorchLineWhenStrong(state, fen, best, targetElo, depth);
+    }
   } else {
     const best = await getBestMoveTimed(
       engine,
@@ -152,7 +173,15 @@ export async function getChimeraMove(
       chimeraThinkTimeMs(targetElo, mirror, timeMult),
       chimeraThinkTimeMs(targetElo, mirror, timeMult) + 12_000
     );
-    if (best) return best;
+    if (best) {
+      return preferTorchLineWhenStrong(
+        state,
+        fen,
+        best,
+        targetElo,
+        baseDepth
+      );
+    }
   }
 
   const fallback = pickRandom(legal);

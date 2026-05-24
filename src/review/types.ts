@@ -33,6 +33,10 @@ export interface ReviewMoveAnalysis {
   isCritical: boolean;
   insight: string;
   position: ReviewPositionInsight;
+  /** Torch 4 line when dual-engine review ran */
+  torchBestUci?: string;
+  torchEvalWhite?: number;
+  torchAgrees?: boolean;
 }
 
 export type HeatKind =
@@ -117,6 +121,9 @@ export interface GameReviewReport {
   /** Stockfish depth used for move classification */
   analysisDepth: number;
   analysisMultipv: number;
+  /** Engines that contributed to this review */
+  analysisEngines?: ("stockfish" | "torch")[];
+  torchUsed?: boolean;
   openingLine: string;
   phases: GamePhaseStats[];
   evalTimeline: EvalPoint[];

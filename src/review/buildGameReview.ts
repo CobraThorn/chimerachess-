@@ -259,6 +259,8 @@ export async function buildGameReview(
     ...counts,
     analysisDepth: REVIEW_MOVE_DEPTH,
     analysisMultipv: REVIEW_MULTIPV,
+    analysisEngines: ["stockfish"],
+    torchUsed: false,
     openingLine,
     phases,
     evalTimeline,

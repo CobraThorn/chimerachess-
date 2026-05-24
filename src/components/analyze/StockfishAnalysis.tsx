@@ -17,11 +17,14 @@ import {
   runFullAnalysis,
   type LiveAnalysis,
 } from "../../engine/analysis";
+import { TORCH_VERSION } from "../../engine/torch";
+import { STOCKFISH_VERSION } from "../../engine/stockfish";
+import { getTopMoves } from "../../engine/stockfish";
 import {
-  createStockfishEngine,
-  STOCKFISH_VERSION,
-  type StockfishEngine,
-} from "../../engine/stockfish";
+  engineForMode,
+  useAnalysisEngines,
+  type AnalysisEngineMode,
+} from "../../hooks/useAnalysisEngines";
 import EvalBar from "./EvalBar";
 import ChessBoardGrid from "../chess/ChessBoardGrid";
 import ChessPiece from "../chess/ChessPiece";
@@ -52,13 +55,24 @@ export default function StockfishAnalysis() {
   const [orientation, setOrientation] = useState<Color>("w");
   const [analysisOn, setAnalysisOn] = useState(true);
   const [depthPreset, setDepthPreset] = useState(0);
-  const [sfReady, setSfReady] = useState(false);
-  const [engineError, setEngineError] = useState<string | null>(null);
+  const [engineMode, setEngineMode] = useState<AnalysisEngineMode>("stockfish");
   const [thinking, setThinking] = useState(false);
   const [live, setLive] = useState<LiveAnalysis | null>(null);
   const [topMoves, setTopMoves] = useState<{ move: string; cp: number }[]>([]);
+  const [torchLine, setTorchLine] = useState<{ move: string; cp: number } | null>(
+    null
+  );
 
-  const engineRef = useRef<StockfishEngine | null>(null);
+  const {
+    stockfish,
+    sfReady,
+    engineError,
+    hasTorch,
+    ensureTorch,
+  } = useAnalysisEngines();
+
+  const engineRef = useRef(stockfish);
+  engineRef.current = stockfish;
   const cancelRef = useRef<(() => void) | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -75,35 +89,17 @@ export default function StockfishAnalysis() {
     status.type === "stalemate" ||
     status.type === "draw";
 
-  useEffect(() => {
-    const engine = createStockfishEngine();
-    engineRef.current = engine;
-    setEngineError(null);
-    const deadline = Date.now() + 20_000;
-    const t = setInterval(() => {
-      if (engine.ready) {
-        setSfReady(true);
-        clearInterval(t);
-        return;
-      }
-      if (engine.loadFailed || Date.now() > deadline) {
-        clearInterval(t);
-        setEngineError(
-          "Stockfish failed to load — hard-refresh or check /stockfish/ assets."
-        );
-      }
-    }, 100);
-    return () => {
-      clearInterval(t);
-      cancelRef.current?.();
-      engine.quit();
-      engineRef.current = null;
-      setSfReady(false);
-    };
-  }, []);
-
   const runEngine = useCallback(async () => {
-    const engine = engineRef.current;
+    const torchEng = await ensureTorch();
+    let engine = engineForMode(engineMode, stockfish, torchEng);
+    if (engineMode === "dual") {
+      engine = stockfish;
+    }
+    if (engineMode === "torch" && !torchEng?.ready) {
+      setThinking(false);
+      setTorchLine(null);
+      return;
+    }
     if (!engine?.ready || !analysisOn || gameOver) {
       setThinking(false);
       if (gameOver) {
@@ -142,12 +138,38 @@ export default function StockfishAnalysis() {
           }))
         );
       }
+
+      if (engineMode === "dual" && hasTorch) {
+        const torch = await ensureTorch();
+        if (torch?.ready && analysisGen.current === gen) {
+          torch.stop();
+          const tops = await getTopMoves(
+            torch,
+            targetFen,
+            analysisMode.depth,
+            1
+          );
+          if (tops[0] && toFen(stateRef.current) === targetFen) {
+            setTorchLine({ move: tops[0].move, cp: tops[0].cp });
+          }
+        }
+      } else {
+        setTorchLine(null);
+      }
     } finally {
       if (analysisGen.current === gen) {
         setThinking(false);
       }
     }
-  }, [analysisOn, analysisMode, gameOver]);
+  }, [
+    analysisOn,
+    analysisMode,
+    engineMode,
+    gameOver,
+    hasTorch,
+    ensureTorch,
+    stockfish,
+  ]);
 
   useEffect(() => {
     if (!sfReady) return;
@@ -237,10 +259,13 @@ export default function StockfishAnalysis() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
-            Free engine · Stockfish {STOCKFISH_VERSION}
+            CHIMERA analysis · Stockfish {STOCKFISH_VERSION}
+            {hasTorch ? ` · Torch ${TORCH_VERSION}` : ""}
           </p>
           <p className="mt-1 font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.4)]">
-            Live analysis updates as you move — no account required.
+            {hasTorch
+              ? "Pick Stockfish, Torch 4, or dual lines — integrated with game review."
+              : "Torch 4 available when you deploy /public/torch/ (see docs/TORCH.md)."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -253,6 +278,30 @@ export default function StockfishAnalysis() {
               Loading engine…
             </span>
           ) : null}
+          {hasTorch && (
+            <>
+              {(
+                [
+                  ["stockfish", "SF 18"],
+                  ["torch", "Torch 4"],
+                  ["dual", "Dual"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setEngineMode(id)}
+                  className={`rounded-sm px-3 py-1.5 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.12em] ${
+                    engineMode === id
+                      ? "border border-[rgba(232,197,71,0.45)] text-gold-glow"
+                      : "text-[rgba(255,255,255,0.35)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </>
+          )}
           <button
             type="button"
             onClick={() => setAnalysisOn((v) => !v)}
@@ -422,6 +471,23 @@ export default function StockfishAnalysis() {
               </p>
             ) : (
               <ul className="mt-2 space-y-2">
+                {torchLine && engineMode === "dual" && (
+                  <li className="rounded-sm border border-[rgba(255,160,60,0.25)] bg-[rgba(255,160,60,0.06)] px-3 py-2">
+                    <span className="font-[family-name:var(--font-hud)] text-[7px] tracking-[0.15em] text-[rgba(255,180,80,0.85)]">
+                      Torch 4
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => playTopMove(torchLine.move)}
+                      className="mt-1 block w-full text-left font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.75)] hover:text-gold-glow"
+                    >
+                      {uciToSanPreview(state, torchLine.move)}
+                      <span className="ml-2 text-[10px] text-[rgba(255,255,255,0.35)]">
+                        {formatEvalLabel(torchLine.cp, false)}
+                      </span>
+                    </button>
+                  </li>
+                )}
                 {topMoves.map((line, i) => {
                   const san = uciToSanPreview(state, line.move);
                   return (

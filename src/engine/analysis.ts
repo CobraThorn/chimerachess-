@@ -1,5 +1,5 @@
 import type { EvalResult } from "./stockfish";
-import type { StockfishEngine } from "./stockfish";
+import type { ChessEngine } from "./types";
 
 export interface LiveAnalysis {
   depth: number;
@@ -94,7 +94,7 @@ function parseInfoLine(line: string, fen: string): LiveAnalysis | null {
  * Run Stockfish analysis with live depth updates. Call stopAnalysis before a new run.
  */
 export function runLiveAnalysis(
-  engine: StockfishEngine,
+  engine: ChessEngine,
   fen: string,
   depth: number,
   onUpdate: (analysis: LiveAnalysis) => void
@@ -120,7 +120,7 @@ export function runLiveAnalysis(
   };
 }
 
-export function stopAnalysis(engine: StockfishEngine): void {
+export function stopAnalysis(engine: ChessEngine): void {
   engine.stop();
 }
 
@@ -138,7 +138,7 @@ const ANALYSIS_TIMEOUT_MS = 45_000;
 
 /** One Stockfish run: live eval + top lines (serial, no overlapping `go`). */
 export function runFullAnalysis(
-  engine: StockfishEngine,
+  engine: ChessEngine,
   fen: string,
   mode: AnalysisGoMode,
   onUpdate: (analysis: LiveAnalysis) => void

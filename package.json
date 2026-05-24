@@ -8,9 +8,10 @@
     "start": "node server/index.mjs",
     "server": "node server/index.mjs",
     "dev:full": "node scripts/dev-full.mjs",
-    "build": "node scripts/copy-stockfish.mjs && tsc -b && vite build",
+    "build": "node scripts/copy-stockfish.mjs && node scripts/copy-torch.mjs && tsc -b && vite build",
+    "torch:copy": "node scripts/copy-torch.mjs",
     "preview": "vite preview",
-    "postinstall": "node scripts/copy-stockfish.mjs",
+    "postinstall": "node scripts/copy-stockfish.mjs && node scripts/copy-torch.mjs",
     "stockfish:copy": "node scripts/copy-stockfish.mjs",
     "wipe-data": "node scripts/wipe-chimera-data.mjs"
   },

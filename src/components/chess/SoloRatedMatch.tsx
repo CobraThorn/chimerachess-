@@ -36,6 +36,7 @@ import {
 import type { CrsPostGameSummary } from "../../crs/types";
 import CrsPostGamePanel from "../crs/CrsPostGamePanel";
 import CrsRatingCard from "../crs/CrsRatingCard";
+import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
 import type { GameResult } from "../../online/types";
@@ -363,7 +364,10 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
       reviewTimer = setInterval(() => {
         if (cancelled || !reviewEngine.ready) return;
         if (reviewTimer) clearInterval(reviewTimer);
-        void runReview(reviewEngine, reviewInput);
+        void (async () => {
+          const torch = await acquireSharedTorch();
+          if (!cancelled) void runReview(reviewEngine, reviewInput, torch);
+        })();
       }, 120);
     })();
 
