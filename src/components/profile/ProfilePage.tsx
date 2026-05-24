@@ -5,7 +5,7 @@ import {
   resetAllStats,
   userStyleToRadar,
 } from "../../ai";
-import { INITIAL_CHIMERA_ELO } from "../../ai/types";
+import { effectiveChimeraElo } from "../../ai/chimeraStrength";
 import { logDataEvent } from "../../account/events";
 import { maskEmail } from "../../account/validation";
 import { useAccount } from "../../hooks/useAccount";
@@ -79,7 +79,7 @@ export default function ProfilePage() {
 
   const crs = ensureCrsState(memory);
   const userElo = crs.chimeraRating;
-  const chimeraElo = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
+  const chimeraElo = effectiveChimeraElo(memory);
   const rank = getRankTitle(userElo);
   const wr = winRate(memory);
   const recentGames = [...memory.games].reverse().slice(0, 8);

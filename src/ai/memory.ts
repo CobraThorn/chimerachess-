@@ -12,6 +12,7 @@ import {
   createInitialCrsState,
   ensureCrsState,
 } from "../crs/profile";
+import { nudgeStoredChimeraElo, getUserStrength } from "./chimeraStrength";
 import { clampElo, calculateEloChange, resultToScore } from "./elo";
 import { learnFromGame, ensureLearning } from "./learning/learn";
 import { applyOpponentPhenotype, ensureOpponentPhenotype } from "./learning/phenotype";
@@ -197,14 +198,15 @@ export function finishGame(
 
   let userStyle = memory.userStyle ?? createPlayStyleProfile(INITIAL_USER_ELO);
   const chimeraEloBefore = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
-  const userEloBefore = userStyle.elo;
+  const userEloBefore = getUserStrength(memory);
   const chimeraScore = resultToScore(game.result, false);
   const chimeraDelta = calculateEloChange(chimeraEloBefore, userEloBefore, chimeraScore);
   userStyle = {
     ...userStyle,
     games: userStyle.games + 1,
   };
-  const chimeraElo = clampElo(chimeraEloBefore + chimeraDelta);
+  let chimeraElo = clampElo(chimeraEloBefore + chimeraDelta, 80, 3200);
+  chimeraElo = nudgeStoredChimeraElo(memory, chimeraElo);
 
   const stats = { ...memory.stats };
   stats.totalGames += 1;

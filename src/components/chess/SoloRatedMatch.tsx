@@ -11,7 +11,8 @@ import {
   updateStyleFromMove,
 } from "../../ai";
 import { waitForPendingMistakeAnalyses } from "../../ai/mistakeAnalyzer";
-import { CHIMERA_MEMORY_EVENT, INITIAL_CHIMERA_ELO } from "../../ai/types";
+import { effectiveChimeraElo } from "../../ai/chimeraStrength";
+import { CHIMERA_MEMORY_EVENT } from "../../ai/types";
 import type { GameMoveRecord, MistakeRecord, StoredGame } from "../../ai/types";
 import {
   createInitialState,
@@ -151,7 +152,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     return () => window.removeEventListener(CHIMERA_MEMORY_EVENT, sync);
   }, []);
   const crs = ensureCrsState(memory);
-  const chimeraElo = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
+  const chimeraElo = effectiveChimeraElo(memory);
 
   const turn = state.turn;
   const userTurn = turn === userColor;

@@ -9,6 +9,7 @@ import {
   getChimeraMove,
   getTopPatterns,
   chimeraStrengthLabel,
+  effectiveChimeraElo,
   loadMemory,
   saveMemory,
   createPersonaPlayStyle,
@@ -23,7 +24,6 @@ import { getSubdivisionDef } from "../../ai/cognition/archetypes";
 import { useCustomisation } from "../../customisation";
 import {
   CHIMERA_MEMORY_EVENT,
-  INITIAL_CHIMERA_ELO,
 } from "../../ai/types";
 import ChimeraMemoryRadar from "./ChimeraMemoryRadar";
 import ChimeraLearningPanel from "./ChimeraLearningPanel";
@@ -118,7 +118,7 @@ export default function ChimeraMatch() {
   const crs = memory.crs ?? ensureCrsState(memory);
   const userElo = crs.chimeraRating;
   const crsPostGame = memory.crs?.lastPostGame;
-  const chimeraElo = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
+  const chimeraElo = effectiveChimeraElo(memory);
   const chimeraIdentity = memory.chimeraOpponentIdentity;
   const chimeraSub = chimeraIdentity
     ? getSubdivisionDef(chimeraIdentity.subdivision)

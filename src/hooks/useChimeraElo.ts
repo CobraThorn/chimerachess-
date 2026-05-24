@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { loadMemory } from "../ai";
+import { effectiveChimeraElo, loadMemory } from "../ai";
 import { ensureCrsState } from "../crs/profile";
 import {
   CHIMERA_MEMORY_EVENT,
@@ -15,7 +15,7 @@ export function useChimeraElo() {
     const m = loadMemory();
     const crs = ensureCrsState(m);
     setUserCrs(crs.chimeraRating);
-    setChimeraElo(m.chimeraElo ?? INITIAL_CHIMERA_ELO);
+    setChimeraElo(effectiveChimeraElo(m));
   };
   useEffect(() => {
     refresh();

@@ -5,11 +5,19 @@ import { moveToUci, uciToMove } from "../chess/uci";
 import type { StockfishEngine } from "../engine/stockfish";
 import {
   configureEngine,
+  getBestMove,
   getBestMoveTimed,
 } from "../engine/stockfish";
 import { archetypePlayBias } from "./cognition/archetypePlay";
 import type { CognitiveIdentity } from "./cognition/identity";
 import { getChimeraBookMove } from "./chimeraOpeningBook";
+import {
+  blunderRateForStrength,
+  chimeraSearchDepth,
+  chimeraThinkTimeMs,
+  effectiveChimeraElo,
+  useFullEngineStrength,
+} from "./chimeraStrength";
 import {
   counterStyleLabel,
   learningIsActive,
@@ -20,25 +28,12 @@ import { ensureLearning } from "./learning/learn";
 import { phenotypeDisplayName } from "./learning/phenotype";
 import { positionKey } from "./memory";
 import type { ChimeraMemory } from "./types";
-import { INITIAL_CHIMERA_ELO } from "./types";
-
-const START_ELO = INITIAL_CHIMERA_ELO;
 
 const configuredEloByEngine = new WeakMap<StockfishEngine, number>();
 
 function pickRandom<T>(arr: T[]): T | null {
   if (!arr.length) return null;
   return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function thinkTimeMs(
-  targetElo: number,
-  mirror: boolean,
-  mult: number
-): number {
-  if (mirror) return 140;
-  const base = Math.min(320, Math.max(140, 100 + Math.floor(targetElo / 12)));
-  return Math.round(base * mult);
 }
 
 export interface ChimeraMoveOptions {
@@ -97,41 +92,47 @@ export async function getChimeraMove(
     }
   }
 
-  const targetElo = Math.max(
-    100,
-    Math.min(memory.chimeraElo ?? START_ELO, 3200)
-  );
+  const targetElo = mirror
+    ? Math.max(100, Math.min(memory.chimeraElo ?? 250, 3200))
+    : effectiveChimeraElo(memory);
 
-  const blunderRate = Math.min(
-    0.35,
-    Math.max(
-      0.05,
-      (mirror
-        ? Math.max(0.15, 0.35 - adapt * 0.003)
-        : Math.max(0.08, 0.22 - adapt * 0.002)) +
-        bias.blunderRateDelta +
-        (learnBias?.blunderRateDelta ?? 0)
-    )
+  const blunderRate = blunderRateForStrength(
+    targetElo,
+    adapt,
+    mirror,
+    bias.blunderRateDelta,
+    learnBias?.blunderRateDelta ?? 0
   );
   if (Math.random() < blunderRate) {
     const randomMove = pickRandom(legal);
     if (randomMove) return moveToUci(randomMove);
   }
 
-  if (configuredEloByEngine.get(engine) !== targetElo) {
-    const skillLevel = Math.min(
-      20,
-      Math.max(0, Math.floor((targetElo - 1320) / 60))
-    );
-    await configureEngine(engine, {
-      limitStrength: true,
-      elo: targetElo,
-      skillLevel,
-    });
-    configuredEloByEngine.set(engine, targetElo);
+  const engineKey = mirror ? -targetElo : targetElo;
+  if (configuredEloByEngine.get(engine) !== engineKey) {
+    if (useFullEngineStrength(targetElo)) {
+      await configureEngine(engine, {
+        limitStrength: false,
+        skillLevel: 20,
+      });
+    } else {
+      const skillLevel = Math.min(
+        20,
+        Math.max(0, Math.floor((targetElo - 1320) / 60))
+      );
+      await configureEngine(engine, {
+        limitStrength: true,
+        elo: targetElo,
+        skillLevel,
+      });
+    }
+    configuredEloByEngine.set(engine, engineKey);
   }
 
-  const baseDepth = Math.min(16, 8 + Math.floor(targetElo / 200));
+  const baseDepth = chimeraSearchDepth(
+    targetElo,
+    Math.min(16, 8 + Math.floor(targetElo / 200))
+  );
 
   if (!mirror && learningIsActive(memory)) {
     const learned = await pickLearnedMove(engine, state, memory, baseDepth);
@@ -139,12 +140,20 @@ export async function getChimeraMove(
   }
 
   const timeMult = learnBias?.thinkTimeMult ?? 1;
-  const best = await getBestMoveTimed(
-    engine,
-    fen,
-    thinkTimeMs(targetElo, mirror, timeMult)
-  );
-  if (best) return best;
+
+  if (targetElo >= 2200) {
+    const depth = chimeraSearchDepth(targetElo, baseDepth);
+    const best = await getBestMove(engine, fen, depth);
+    if (best) return best;
+  } else {
+    const best = await getBestMoveTimed(
+      engine,
+      fen,
+      chimeraThinkTimeMs(targetElo, mirror, timeMult),
+      chimeraThinkTimeMs(targetElo, mirror, timeMult) + 12_000
+    );
+    if (best) return best;
+  }
 
   const fallback = pickRandom(legal);
   return fallback ? moveToUci(fallback) : null;
@@ -154,10 +163,18 @@ export function chimeraStrengthLabel(memory: ChimeraMemory): string {
   const L = ensureLearning(memory);
   const adapt = L.adaptationScore;
   const pheno = L.phenotype ? phenotypeDisplayName(L.phenotype) : null;
+  const playElo = effectiveChimeraElo(memory);
+  const stored = memory.chimeraElo ?? 250;
+  const matchingYou = playElo > stored + 75;
+
+  const eloPart = matchingYou
+    ? `~${playElo} Elo · matching your level`
+    : `~${playElo} Elo`;
+
   if (adapt < 10 && !learningIsActive(memory)) {
     return pheno
-      ? `~${memory.chimeraElo} Elo · ${pheno} · observing you`
-      : `~${memory.chimeraElo} Elo · learning your style`;
+      ? `${eloPart} · ${pheno} · observing you`
+      : `${eloPart} · learning your style`;
   }
-  return `~${memory.chimeraElo} Elo · ${adapt}% adapted · ${counterStyleLabel(L.counterStyle)}`;
+  return `${eloPart} · ${adapt}% adapted · ${counterStyleLabel(L.counterStyle)}`;
 }
