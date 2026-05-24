@@ -298,7 +298,7 @@ export default function OnlineMatch({
           </div>
         </div>
 
-        <div className="relative w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
+        <div className="relative isolate w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
           <ChessBoardGrid
             state={state}
             orientation={userColor}
@@ -316,7 +316,7 @@ export default function OnlineMatch({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 flex items-center justify-center bg-[rgba(5,5,8,0.8)]"
+                className="absolute inset-0 z-30 flex items-center justify-center bg-[rgba(5,5,8,0.85)]"
               >
                 <div className="glass-panel rounded-sm px-6 py-4">
                   <p className="mb-3 text-center font-[family-name:var(--font-hud)] text-[9px] tracking-[0.3em] text-[rgba(232,197,71,0.7)]">

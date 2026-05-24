@@ -575,7 +575,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
             </div>
           </div>
 
-          <motion.div className="relative w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
+          <motion.div className="relative isolate w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
             <ChessBoardGrid
               state={state}
               orientation={userColor}
@@ -593,7 +593,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="absolute inset-0 flex items-center justify-center bg-[rgba(5,5,8,0.8)]"
+                  className="absolute inset-0 z-30 flex items-center justify-center bg-[rgba(5,5,8,0.85)]"
                 >
                   <motion.div
                     initial={{ scale: 0.92, opacity: 0 }}

@@ -29,10 +29,10 @@ const DOCK_ICONS = {
 export default function MobileDock() {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-40 md:hidden pb-[env(safe-area-inset-bottom,0px)]"
       aria-label="Mobile navigation"
     >
-      <div className="mx-3 mb-4 glass-panel flex items-end justify-around rounded-2xl px-2 py-2 pb-3">
+      <div className="mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom,0px))] glass-panel flex items-end justify-around rounded-2xl px-2 py-2 pb-3">
         {MOBILE_DOCK.map((item) => {
           const isPrimary = "primary" in item && item.primary;
 

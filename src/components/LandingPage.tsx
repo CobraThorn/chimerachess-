@@ -114,7 +114,7 @@ export default function LandingPage() {
             </p>
 
             {section.id === "play" && (
-              <div className="mt-12">
+              <div className="relative z-10 mt-12 scroll-mt-28 pb-[max(7rem,env(safe-area-inset-bottom,0px)+5.5rem)] md:pb-8">
                 <ChessGame />
               </div>
             )}

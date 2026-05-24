@@ -596,7 +596,7 @@ export default function ChimeraMatch() {
         </div>
 
         <div
-          className={`relative w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)] rounded-sm transition-shadow duration-500 ${
+          className={`relative isolate w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)] rounded-sm transition-shadow duration-500 ${
             userTurn && !gameOver && !chimeraThinking
               ? "shadow-[0_0_48px_rgba(232,197,71,0.12)] ring-1 ring-[rgba(232,197,71,0.2)]"
               : "ring-1 ring-[rgba(255,255,255,0.04)]"
@@ -641,7 +641,7 @@ export default function ChimeraMatch() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 flex items-center justify-center bg-[rgba(5,5,8,0.8)]"
+                className="absolute inset-0 z-30 flex items-center justify-center bg-[rgba(5,5,8,0.85)]"
               >
                 <div className="glass-panel rounded-sm px-6 py-4">
                   <p className="mb-3 text-center font-[family-name:var(--font-hud)] text-[9px] tracking-[0.3em] text-[rgba(232,197,71,0.7)]">

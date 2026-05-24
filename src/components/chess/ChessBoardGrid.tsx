@@ -104,7 +104,7 @@ export default function ChessBoardGrid({
           <span className="hud-corner hud-corner--br" />
         </>
       )}
-      <div className="relative aspect-square w-full overflow-hidden">
+      <div className="relative isolate aspect-square w-full overflow-hidden [transform:translateZ(0)]">
         <div
           className="grid size-full grid-cols-8 grid-rows-8 border box-border"
           style={{ borderColor: boardTheme.border }}
@@ -146,40 +146,58 @@ export default function ChessBoardGrid({
                 disabled={disabled || !onSquareClick}
                 onClick={() => onSquareClick?.(sq)}
                 className={[
-                  "@container relative flex size-full min-h-0 min-w-0 touch-manipulation items-center justify-center p-0",
-                  "transition-[background-color,box-shadow] duration-300 ease-out",
+                  "@container relative flex size-full min-h-0 min-w-0 touch-manipulation items-center justify-center overflow-hidden p-0",
+                  "transition-[background-color] duration-300 ease-out",
                   disabled && "opacity-90",
-                  isThinking && "ring-1 ring-inset",
+                  isThinking && "ring-1 ring-inset ring-[rgba(0,229,255,0.25)]",
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                style={{
-                  backgroundColor: bg,
-                  boxShadow: [
-                    isSelected
-                      ? `inset 0 0 0 2px ${boardTheme.selectedRing}`
-                      : "",
-                    isThinking ? "inset 0 0 0 1px rgba(0,229,255,0.25)" : "",
-                    isLegal && !piece
-                      ? `inset 0 0 0 999px ${LEGAL_TINT}`
-                      : "",
-                    isLegal && isCapture
-                      ? `inset 0 0 0 999px ${LEGAL_CAPTURE_TINT}`
-                      : "",
-                    isEngineFrom
-                      ? "inset 0 0 0 999px rgba(255,200,60,0.12)"
-                      : "",
-                    isEngineTo
-                      ? "inset 0 0 0 999px rgba(0,229,255,0.14)"
-                      : "",
-                    heat
-                      ? `inset 0 0 0 999px ${heat.fill}, inset 0 0 0 2px ${heat.ring}`
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || undefined,
-                }}
+                style={{ backgroundColor: bg }}
               >
+                {isLegal && !piece && (
+                  <span
+                    className="pointer-events-none absolute inset-0"
+                    style={{ backgroundColor: LEGAL_TINT }}
+                    aria-hidden
+                  />
+                )}
+                {isLegal && isCapture && (
+                  <span
+                    className="pointer-events-none absolute inset-0"
+                    style={{ backgroundColor: LEGAL_CAPTURE_TINT }}
+                    aria-hidden
+                  />
+                )}
+                {isEngineFrom && (
+                  <span
+                    className="pointer-events-none absolute inset-0 bg-[rgba(255,200,60,0.12)]"
+                    aria-hidden
+                  />
+                )}
+                {isEngineTo && (
+                  <span
+                    className="pointer-events-none absolute inset-0 bg-[rgba(0,229,255,0.14)]"
+                    aria-hidden
+                  />
+                )}
+                {heat && (
+                  <span
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      backgroundColor: heat.fill,
+                      boxShadow: `inset 0 0 0 2px ${heat.ring}`,
+                    }}
+                    aria-hidden
+                  />
+                )}
+                {isSelected && (
+                  <span
+                    className="pointer-events-none absolute inset-0"
+                    style={{ boxShadow: `inset 0 0 0 2px ${boardTheme.selectedRing}` }}
+                    aria-hidden
+                  />
+                )}
                 {isLegal && !piece && (
                   <span
                     className="h-[18%] w-[18%] min-h-1.5 min-w-1.5 max-h-2.5 max-w-2.5 rounded-full opacity-80"
@@ -229,7 +247,7 @@ export default function ChessBoardGrid({
         {slide && (
           <motion.div
             key={slide.key}
-            className="pointer-events-none absolute z-20 flex h-[12.5%] w-[12.5%] items-center justify-center will-change-transform"
+            className="pointer-events-none absolute z-20 flex h-[12.5%] w-[12.5%] items-center justify-center"
             initial={squarePercent(slide.from, flip)}
             animate={squarePercent(slide.to, flip)}
             transition={{
