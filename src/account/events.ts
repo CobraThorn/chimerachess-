@@ -3,7 +3,7 @@ import {
   scheduleSync,
 } from "../api/chimeraBackend";
 import { hasAnalyticsConsent, loadDataEvents, saveDataEvents } from "./storage";
-import type { DataCollectionEvent, DataEventType } from "./types";
+import { ACCOUNT_STORAGE_KEY, type DataCollectionEvent, type DataEventType } from "./types";
 
 const ALWAYS_LOG: DataEventType[] = [
   "sign_up",
@@ -39,7 +39,7 @@ export function logDataEvent(
 
 export function exportDataEventsJson(): string {
   const store = loadDataEvents();
-  const account = localStorage.getItem("chimera-account-v1");
+  const account = localStorage.getItem(ACCOUNT_STORAGE_KEY);
   return JSON.stringify(
     {
       exportedAt: new Date().toISOString(),

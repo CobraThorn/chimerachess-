@@ -20,7 +20,7 @@ export interface ChimeraUserSetup {
 }
 
 export interface ChimeraSaveBundle {
-  version: 1;
+  version: 2;
   savedAt: number;
   setup: ChimeraUserSetup | null;
   customisation: CustomisationPrefs;
@@ -28,4 +28,4 @@ export interface ChimeraSaveBundle {
   memory?: unknown;
 }
 
-export const CHIMERA_SETUP_STORAGE_KEY = "chimera-user-setup-v1";
+export const CHIMERA_SETUP_STORAGE_KEY = "chimera-user-setup-v2";

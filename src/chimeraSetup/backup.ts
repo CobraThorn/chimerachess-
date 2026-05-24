@@ -17,7 +17,7 @@ export function buildSaveBundle(): ChimeraSaveBundle {
   }
 
   return {
-    version: 1,
+    version: 2,
     savedAt: Date.now(),
     setup: loadChimeraSetup(),
     customisation: loadCustomisation(),
@@ -46,7 +46,7 @@ export function applySaveBundle(bundle: ChimeraSaveBundle): void {
 }
 
 export function localBackupKey(accountId: string): string {
-  return `chimera-cloud-save-${accountId}`;
+  return `chimera-cloud-save-v2-${accountId}`;
 }
 
 export function saveLocalBackup(accountId: string, bundle: ChimeraSaveBundle): void {
@@ -58,7 +58,7 @@ export function loadLocalBackup(accountId: string): ChimeraSaveBundle | null {
     const raw = localStorage.getItem(localBackupKey(accountId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ChimeraSaveBundle;
-    if (parsed?.version !== 1) return null;
+    if (parsed?.version !== 2) return null;
     return parsed;
   } catch {
     return null;
@@ -86,7 +86,7 @@ export function persistBackupAfterSetup(
     memory = undefined;
   }
   const bundle: ChimeraSaveBundle = {
-    version: 1,
+    version: 2,
     savedAt: Date.now(),
     setup,
     customisation,

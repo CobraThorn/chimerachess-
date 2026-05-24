@@ -11,7 +11,8 @@
     "build": "node scripts/copy-stockfish.mjs && tsc -b && vite build",
     "preview": "vite preview",
     "postinstall": "node scripts/copy-stockfish.mjs",
-    "stockfish:copy": "node scripts/copy-stockfish.mjs"
+    "stockfish:copy": "node scripts/copy-stockfish.mjs",
+    "wipe-data": "node scripts/wipe-chimera-data.mjs"
   },
   "dependencies": {
     "chess.js": "^1.4.0",

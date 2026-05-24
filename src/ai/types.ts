@@ -99,6 +99,6 @@ export const INITIAL_USER_ELO = 100;
 export const INITIAL_CHIMERA_ELO = 250;
 /** Legacy default before CHIMERA start was raised to 250 */
 export const LEGACY_CHIMERA_ELO = 100;
-export const CHIMERA_STORAGE_KEY = "chimera-memory-v1";
+export const CHIMERA_STORAGE_KEY = "chimera-memory-v2";
 /** Fired on `window` after memory is saved or reset (same tab). */
 export const CHIMERA_MEMORY_EVENT = "chimera-memory-update";

@@ -50,8 +50,8 @@ export interface DataCollectionStore {
   lastSyncedAt: number | null;
 }
 
-export const ACCOUNT_STORAGE_KEY = "chimera-account-v1";
-export const DATA_EVENTS_KEY = "chimera-data-events-v1";
+export const ACCOUNT_STORAGE_KEY = "chimera-account-v2";
+export const DATA_EVENTS_KEY = "chimera-data-events-v2";
 export const ACCOUNT_EVENT = "chimera-account-update";
 
 export const EMPTY_CONSENTS: DataConsents = {
