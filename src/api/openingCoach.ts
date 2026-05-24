@@ -15,7 +15,7 @@ export interface CoachInsight {
   source: "gpt" | "local";
 }
 
-const CACHE_PREFIX = "chimera-coach-v2:";
+const CACHE_PREFIX = "chimera-coach-v3:";
 
 const ARROW_COLORS = new Set<ArrowColor>([
   "green",

@@ -1,0 +1,4 @@
+{
+  "generation": 3,
+  "note": "Bump generation and redeploy to wipe all server-side user data once."
+}

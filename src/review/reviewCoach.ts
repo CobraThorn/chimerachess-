@@ -8,7 +8,7 @@ import type {
   ReviewMoveAnalysis,
 } from "./types";
 
-const CACHE_PREFIX = "chimera-review-coach-v2:";
+const CACHE_PREFIX = "chimera-review-coach-v3:";
 
 interface GptReviewJson {
   title?: string;

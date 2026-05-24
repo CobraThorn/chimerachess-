@@ -4,8 +4,8 @@ import { ACCOUNT_EVENT } from "../account/types";
 import { resolveApiBase } from "../config/productionApi";
 import { friendlyCloudError } from "../utils/userFacingError";
 
-const SYNC_QUEUE_KEY = "chimera-sync-queue-v2";
-const SYNC_META_KEY = "chimera-sync-meta-v2";
+const SYNC_QUEUE_KEY = "chimera-sync-queue-v3";
+const SYNC_META_KEY = "chimera-sync-meta-v3";
 
 export interface SyncMeta {
   lastSyncedAt: number | null;

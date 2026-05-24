@@ -31,7 +31,7 @@ async function main() {
     await fs.mkdir(dir, { recursive: true });
     total += await wipeDir(dir);
   }
-  const marker = path.join(DATA_DIR, ".chimera-storage-generation-2");
+  const marker = path.join(DATA_DIR, ".chimera-storage-generation-3");
   await fs.writeFile(
     marker,
     JSON.stringify({ wipedAt: Date.now(), via: "wipe-chimera-data.mjs" }, null, 2)

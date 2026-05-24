@@ -28,10 +28,18 @@ async function ensureDirs() {
   await fs.mkdir(BACKUPS_DIR, { recursive: true });
 }
 
-const STORAGE_GENERATION_MARKER = path.join(
-  DATA_DIR,
-  ".chimera-storage-generation-2"
-);
+const WIPE_GENERATION_FILE = path.join(__dirname, "wipe-generation.json");
+
+async function readRequiredWipeGeneration() {
+  try {
+    const raw = await fs.readFile(WIPE_GENERATION_FILE, "utf8");
+    const cfg = JSON.parse(raw);
+    const n = Number(cfg?.generation);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
 
 async function wipeAllUserData() {
   await ensureDirs();
@@ -47,23 +55,28 @@ async function wipeAllUserData() {
   return { removed };
 }
 
-/** Runs once per disk: clears all accounts, telemetry, and cloud backups. */
-async function maybeOneTimeGenerationWipe() {
+/** Wipes server data once per wipe-generation.json bump (see server/wipe-generation.json). */
+async function maybeGenerationWipe() {
+  const generation = await readRequiredWipeGeneration();
+  if (!generation) return { wiped: false, generation: 0 };
+
+  const marker = path.join(DATA_DIR, `.chimera-storage-generation-${generation}`);
   try {
-    await fs.access(STORAGE_GENERATION_MARKER);
-    return { wiped: false };
+    await fs.access(marker);
+    return { wiped: false, generation };
   } catch {
-    /* first deploy after generation-2 reset */
+    /* not wiped for this generation yet */
   }
+
   const result = await wipeAllUserData();
   await fs.writeFile(
-    STORAGE_GENERATION_MARKER,
-    JSON.stringify({ wipedAt: Date.now(), ...result }, null, 2)
+    marker,
+    JSON.stringify({ wipedAt: Date.now(), generation, ...result }, null, 2)
   );
   console.log(
-    `[CHIMERA] One-time generation-2 server wipe: ${result.removed} file(s) removed`
+    `[CHIMERA] Generation-${generation} server wipe: ${result.removed} file(s) removed`
   );
-  return { wiped: true, ...result };
+  return { wiped: true, generation, ...result };
 }
 
 function adminSecretOk(req) {
@@ -354,7 +367,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 await ensureDirs();
-await maybeOneTimeGenerationWipe();
+await maybeGenerationWipe();
 attachOnlinePlay(server);
 server.listen(PORT, () => {
   console.log(`CHIMERA data API → http://localhost:${PORT}`);

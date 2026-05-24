@@ -30,4 +30,4 @@ export const DEFAULT_CUSTOMISATION: CustomisationPrefs = {
   pieceSetId: "classic",
 };
 
-export const CUSTOMISATION_STORAGE_KEY = "chimera-customisation-v2";
+export const CUSTOMISATION_STORAGE_KEY = "chimera-customisation-v3";
