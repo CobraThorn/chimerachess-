@@ -170,6 +170,8 @@ export interface IntelligenceArchive {
   mistakeFamilies?: MistakePatternFamily[];
   /** Longitudinal timeline, identity mixture, maturity index */
   cognitiveProfile?: import("../cognitiveProfile/types").CognitivePlayerProfile;
+  /** Custom tactics from detected weak points (unlocks after 5 games) */
+  personalPuzzles?: import("../personalPuzzles/types").PersonalPuzzleDeck;
   updatedAt: number;
 }
 

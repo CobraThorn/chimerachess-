@@ -11,7 +11,7 @@ import Hero from "./Hero";
 import Navbar from "./Navbar";
 import ParticleField from "./ParticleField";
 import StockfishAnalysis from "./analyze/StockfishAnalysis";
-import OpeningTrainer from "./train/OpeningTrainer";
+import TrainHub from "./train/TrainHub";
 import ProfilePage from "./profile/ProfilePage";
 import SettingsSection from "./settings/SettingsSection";
 import LegendsSection from "./legends/LegendsSection";
@@ -124,7 +124,7 @@ export default function LandingPage() {
 
             {section.id === "analyze" && <StockfishAnalysis />}
 
-            {section.id === "train" && <OpeningTrainer />}
+            {section.id === "train" && <TrainHub />}
 
             {section.id === "profile" && <ProfilePage />}
 

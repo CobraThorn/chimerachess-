@@ -22,6 +22,10 @@ import {
   rebuildCognitiveProfile,
   attachCognitiveProfile,
 } from "../cognitiveProfile/engine";
+import {
+  rebuildPersonalPuzzleDeck,
+  attachPersonalPuzzleDeck,
+} from "../personalPuzzles/engine";
 
 /**
  * Post-Game Intelligence Engine — orchestrates all services after a completed game.
@@ -147,6 +151,12 @@ export function runPostGameIntelligence(
     intelligence: archive,
   });
   archive = attachCognitiveProfile(archive, cognitiveProfile);
+
+  const puzzleDeck = rebuildPersonalPuzzleDeck({
+    ...memory,
+    intelligence: archive,
+  });
+  archive = attachPersonalPuzzleDeck(archive, puzzleDeck);
 
   const nextMemory = attachIntelligenceToMemory(memory, archive);
 

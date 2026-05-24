@@ -53,6 +53,14 @@ import { useGameReview } from "../../hooks/useGameReview";
 import type { GameReviewInput } from "../../review/types";
 import GameReviewPanel from "../review/GameReviewPanel";
 import { clearCrsPostGame, ensureCrsState } from "../../crs/profile";
+import {
+  attachPersonalPuzzleDeck,
+  rebuildPersonalPuzzleDeck,
+} from "../../personalPuzzles/engine";
+import {
+  attachIntelligenceToMemory,
+  getIntelligenceArchive,
+} from "../../intelligence/storage";
 import CrsPostGamePanel from "../crs/CrsPostGamePanel";
 import CrsRatingCard from "../crs/CrsRatingCard";
 
@@ -258,7 +266,15 @@ export default function ChimeraMatch() {
       };
       setLastStoredGame(stored);
       setMemory((prev) => {
-        const next = finishGame(prev, stored);
+        let next = finishGame(prev, stored);
+        if (next.games.length >= 5) {
+          const archive = getIntelligenceArchive(next);
+          const deck = rebuildPersonalPuzzleDeck(next);
+          next = attachIntelligenceToMemory(
+            next,
+            attachPersonalPuzzleDeck(archive, deck)
+          );
+        }
         saveMemory(next);
         return next;
       });
