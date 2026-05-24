@@ -1,29 +1,14 @@
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEvalLabel, evalToBarPercent } from "../../engine/analysis";
-import { missSizeWord } from "../../review/metricsDisplay";
-import { HEAT_PASTEL } from "../../review/heatPalette";
-import { mergeSquareHeats } from "../../review/positionInsights";
+import { isPositiveGrade, MOVE_GRADE_META } from "../../review/moveGrades";
 import { stateAtPly } from "../../review/replay";
-import type { GameReviewReport, HeatKind, MoveGrade, ReviewCoachNote } from "../../review/types";
+import type { GameReviewReport, MoveGrade, ReviewCoachNote } from "../../review/types";
 import { uciToMove } from "../../chess";
+import BoardAnnotations, { type BoardArrow } from "../chess/BoardAnnotations";
 import ChessBoardGrid from "../chess/ChessBoardGrid";
 import EvalBar from "../analyze/EvalBar";
-import ReviewHeatLegend from "./ReviewHeatLegend";
-import ReviewMistakeRail from "./ReviewMistakeRail";
 
-const GRADE_STYLES: Record<
-  MoveGrade,
-  { label: string; className: string }
-> = {
-  brilliant: { label: "!!", className: "text-[rgba(0,229,255,0.95)]" },
-  great: { label: "!", className: "text-[rgba(52,211,153,0.9)]" },
-  good: { label: "✓", className: "text-[rgba(255,255,255,0.7)]" },
-  book: { label: "📖", className: "text-[rgba(232,197,71,0.8)]" },
-  inaccuracy: { label: "?!", className: "text-[rgba(255,200,100,0.85)]" },
-  mistake: { label: "?", className: "text-[rgba(255,160,80,0.9)]" },
-  blunder: { label: "??", className: "text-[rgba(255,100,100,0.95)]" },
-};
+const REVIEW_DEPTH = 14;
 
 interface GameReviewRecapProps {
   report: GameReviewReport;
@@ -48,7 +33,7 @@ export default function GameReviewRecap({
 }: GameReviewRecapProps) {
   const maxPly = Math.max(0, report.recapSteps.length - 1);
   const [ply, setPly] = useState(maxPly);
-  const [showHeat, setShowHeat] = useState(true);
+  const [filter, setFilter] = useState<MoveGrade | "all">("all");
 
   useEffect(() => {
     setPly(maxPly);
@@ -59,49 +44,37 @@ export default function GameReviewRecap({
   }, [ply, onEnsureNote]);
 
   const userMove = report.userMoves.find((u) => u.ply === ply);
-  const showPreMoveHeat = showHeat && userMove && userMove.grade !== "brilliant" && userMove.grade !== "great";
-
-  const boardState = useMemo(() => {
-    if (showPreMoveHeat && userMove) {
-      return stateAtPly(report.moves, userMove.ply - 1);
-    }
-    return stateAtPly(report.moves, ply);
-  }, [report.moves, ply, showPreMoveHeat, userMove]);
-
+  const boardState = useMemo(() => stateAtPly(report.moves, ply), [report.moves, ply]);
   const step = report.recapSteps[ply];
-  const note = notes.get(ply);
   const evalPt = report.evalTimeline[ply] ?? report.evalTimeline[report.evalTimeline.length - 1];
+  const note = notes.get(ply);
 
-  const { squareHeats, activeKinds } = useMemo(() => {
-    const kinds = new Set<HeatKind>();
-    const map = new Map<number, { fill: string; ring: string }>();
-    if (!showPreMoveHeat || !userMove) return { squareHeats: map, activeKinds: kinds };
-
-    const merged = mergeSquareHeats(userMove.position.heatSquares);
-    for (const [, h] of merged) {
-      kinds.add(h.kind);
-      const palette = HEAT_PASTEL[h.kind];
-      map.set(h.square, {
-        fill: palette.fill,
-        ring: palette.ring,
-      });
-    }
-    return { squareHeats: map, activeKinds: kinds };
-  }, [showPreMoveHeat, userMove]);
-
-  const engineHighlight = useMemo(() => {
-    if (!userMove?.bestUci || userMove.uci === userMove.bestUci) return null;
+  const arrows = useMemo((): BoardArrow[] => {
+    if (!userMove) return [];
     const before = stateAtPly(report.moves, Math.max(0, userMove.ply - 1)).state;
-    const played = uciToMove(before, userMove.uci);
+    const list: BoardArrow[] = [];
     const best = uciToMove(before, userMove.bestUci);
-    if (!best) return null;
-    return { from: played?.from ?? best.from, to: best.to };
+    const played = uciToMove(before, userMove.uci);
+    if (best) list.push({ from: best.from, to: best.to, color: "green" });
+    if (played && userMove.uci !== userMove.bestUci) {
+      list.push({ from: played.from, to: played.to, color: "red" });
+    }
+    return list;
   }, [userMove, report.moves]);
+
+  const filteredMoves = useMemo(() => {
+    if (filter === "all") return report.userMoves;
+    return report.userMoves.filter((m) => m.grade === filter);
+  }, [report.userMoves, filter]);
 
   const go = useCallback(
     (next: number) => setPly(Math.max(0, Math.min(maxPly, next))),
     [maxPly]
   );
+
+  const jumpToUserMove = (um: (typeof report.userMoves)[0]) => {
+    setPly(um.ply);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -114,79 +87,117 @@ export default function GameReviewRecap({
     return () => window.removeEventListener("keydown", onKey);
   }, [ply, maxPly, go]);
 
-  const coachLoading = loadingPly === ply && !note;
+  const gradeMeta = userMove ? MOVE_GRADE_META[userMove.grade] : null;
 
   return (
     <section className="border-b border-[rgba(232,197,71,0.12)] pb-8">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
-            Hyper recap · engine depth {14}
+            Game review · depth {REVIEW_DEPTH}
           </p>
           <p className="mt-1 font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.4)]">
-            Pastel heat = blind spots & open files · green = best move
-            {gptEnabled ? " · GPT coach" : " · local coach"}
-            {prefetchTotal > 0 && (
-              <span className="ml-2 text-[rgba(0,229,255,0.45)]">
-                ({prefetchDone}/{prefetchTotal})
-              </span>
-            )}
+            Green arrow = best move · Red = your move · {gptEnabled ? "AI coach" : "Local coach"}
+            {prefetchTotal > 0 && ` · notes ${prefetchDone}/${prefetchTotal}`}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex cursor-pointer items-center gap-2 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.15em] text-[rgba(255,255,255,0.45)] uppercase">
-            <input
-              type="checkbox"
-              checked={showHeat}
-              onChange={(e) => setShowHeat(e.target.checked)}
-              className="accent-[rgba(0,229,255,0.7)]"
-            />
-            Heat map
-          </label>
-          <p className="font-[family-name:var(--font-display)] text-lg text-gold-glow">
-            {step?.moveLabel ?? "—"}
-          </p>
-        </div>
+        <p className="font-[family-name:var(--font-display)] text-lg text-gold-glow">
+          {step?.moveLabel ?? "Start"}
+        </p>
       </div>
 
-      <div className="mb-6 rounded-sm border border-[rgba(255,100,100,0.15)] bg-[rgba(255,80,80,0.04)] p-4">
-        <ReviewMistakeRail report={report} activePly={ply} onJump={go} />
+      {/* Classification summary — Chess.com style */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        {(
+          [
+            ["all", "All", report.userMoves.length],
+            ["best", "Best", report.best],
+            ["excellent", "Excellent", report.excellent],
+            ["good", "Good", report.good],
+            ["inaccuracy", "Inaccuracy", report.inaccuracies],
+            ["mistake", "Mistake", report.mistakes],
+            ["miss", "Miss", report.misses],
+            ["blunder", "Blunder", report.blunders],
+            ["brilliant", "Brilliant", report.brilliant],
+          ] as const
+        ).map(([key, label, count]) => {
+          if (key !== "all" && count === 0) return null;
+          const meta = key !== "all" ? MOVE_GRADE_META[key] : null;
+          const active = filter === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setFilter(key)}
+              className={`rounded-sm border px-2.5 py-1.5 font-[family-name:var(--font-hud)] text-[7px] tracking-[0.12em] transition-colors ${
+                active
+                  ? "border-[rgba(0,229,255,0.45)] bg-[rgba(0,229,255,0.1)] text-white"
+                  : "border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.45)] hover:border-[rgba(255,255,255,0.15)]"
+              }`}
+            >
+              {meta && (
+                <span className={`mr-1 ${meta.textClass}`}>{meta.short}</span>
+              )}
+              {label} {key !== "all" && <span className="opacity-60">({count})</span>}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] lg:items-start">
-        <div className="lg:sticky lg:top-6 lg:z-10">
-          {showPreMoveHeat && userMove && (
-            <p className="mb-2 text-center font-[family-name:var(--font-hud)] text-[8px] tracking-[0.2em] text-[rgba(255,180,140,0.75)] uppercase">
-              Before your {userMove.san ?? userMove.uci}
-            </p>
-          )}
+      <div className="grid gap-8 lg:grid-cols-[minmax(280px,380px)_minmax(0,1fr)] lg:items-start">
+        <div className="lg:sticky lg:top-6">
           <div className="flex items-stretch justify-center gap-2">
             <EvalBar
               cpWhite={evalPt?.cpWhite ?? 0}
               label={evalPt?.label ?? formatEvalLabel(0)}
-              boardSize="min(calc(100vw - 3.5rem), 20rem)"
+              boardSize="min(calc(100vw - 3.5rem), 22rem)"
             />
-            <div className="w-[min(calc(100vw-3.5rem),20rem)] min-w-[220px] shrink-0">
+            <div className="relative w-[min(calc(100vw-3.5rem),22rem)] min-w-[220px] shrink-0">
               <ChessBoardGrid
                 state={boardState.state}
                 orientation={report.userColor}
-                lastMove={showPreMoveHeat ? null : boardState.lastMove}
+                lastMove={boardState.lastMove}
                 disabled
-                engineHighlight={engineHighlight}
-                squareHeats={squareHeats}
+                showCorners={false}
+              />
+              <BoardAnnotations
+                orientation={report.userColor}
+                arrows={arrows}
+                showArrows={arrows.length > 0}
               />
             </div>
           </div>
-          <ReviewHeatLegend activeKinds={activeKinds} />
+
+          {userMove && gradeMeta && (
+            <div
+              className={`mt-4 rounded-sm border px-4 py-3 text-center ${gradeMeta.borderClass} ${gradeMeta.bgClass}`}
+            >
+              <p className={`font-[family-name:var(--font-display)] text-xl ${gradeMeta.textClass}`}>
+                {gradeMeta.name}
+              </p>
+              <p className="mt-1 font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.55)]">
+                {userMove.san ?? userMove.uci}
+                {userMove.uci !== userMove.bestUci && (
+                  <>
+                    {" "}
+                    · best <span className="font-mono text-[rgba(134,239,172,0.9)]">{userMove.bestUci}</span>
+                  </>
+                )}
+              </p>
+              <p className="mt-1 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.35)]">
+                {userMove.accuracyPct}% accuracy · {(userMove.cpLoss / 100).toFixed(2)} pawn loss
+              </p>
+            </div>
+          )}
 
           <div className="mt-4 flex items-center justify-center gap-2">
             <NavBtn onClick={() => go(0)} label="⏮" title="Start" />
-            <NavBtn onClick={() => go(ply - 1)} label="◀" title="Previous" disabled={ply <= 0} />
+            <NavBtn onClick={() => go(ply - 1)} label="◀" disabled={ply <= 0} />
             <span className="min-w-[4rem] text-center font-[family-name:var(--font-hud)] text-[10px] tracking-[0.15em] text-[rgba(255,255,255,0.5)]">
               {ply}/{maxPly}
             </span>
-            <NavBtn onClick={() => go(ply + 1)} label="▶" title="Next" disabled={ply >= maxPly} />
-            <NavBtn onClick={() => go(maxPly)} label="⏭" title="End" />
+            <NavBtn onClick={() => go(ply + 1)} label="▶" disabled={ply >= maxPly} />
+            <NavBtn onClick={() => go(maxPly)} label="⏭" />
           </div>
 
           <input
@@ -196,34 +207,34 @@ export default function GameReviewRecap({
             value={ply}
             onChange={(e) => go(Number(e.target.value))}
             className="mt-3 w-full accent-[rgba(0,229,255,0.6)]"
-            aria-label="Scrub through game"
+            aria-label="Scrub game"
           />
 
-          <div className="mt-3 flex h-14 items-end gap-px overflow-hidden rounded-sm bg-[rgba(0,0,0,0.25)] p-1">
+          <div className="mt-3 flex h-16 items-end gap-px overflow-hidden rounded-sm bg-[rgba(0,0,0,0.3)] p-1">
             {report.evalTimeline.map((pt, i) => {
               const h = evalToBarPercent(pt.cpWhite);
-              const active = i === ply;
               const um = report.userMoves.find((u) => u.ply === i);
-              const bad = um && (um.grade === "blunder" || um.grade === "mistake");
+              const bad =
+                um &&
+                !isPositiveGrade(um.grade) &&
+                um.grade !== "book";
               return (
                 <button
                   key={i}
                   type="button"
                   onClick={() => go(i)}
-                  className={`min-w-[4px] flex-1 rounded-t-sm transition-all ${
-                    active ? "ring-1 ring-[rgba(0,229,255,0.6)]" : "opacity-70 hover:opacity-100"
+                  className={`min-w-[3px] flex-1 rounded-t-sm ${
+                    i === ply ? "ring-1 ring-[rgba(0,229,255,0.7)]" : "opacity-75 hover:opacity-100"
                   }`}
                   style={{
-                    height: `${Math.max(12, h)}%`,
+                    height: `${Math.max(10, h)}%`,
                     background: bad
-                      ? active
-                        ? "rgba(255,140,140,0.75)"
-                        : "rgba(255,160,160,0.45)"
-                      : active
-                        ? "rgba(0,229,255,0.55)"
-                        : "rgba(232,197,71,0.35)",
+                      ? "rgba(248,113,113,0.55)"
+                      : i === ply
+                        ? "rgba(0,229,255,0.5)"
+                        : "rgba(134,239,172,0.35)",
                   }}
-                  title={`Ply ${i}: ${pt.label}${bad ? " · mistake" : ""}`}
+                  title={`${pt.label}${um ? ` · ${MOVE_GRADE_META[um.grade].name}` : ""}`}
                 />
               );
             })}
@@ -234,175 +245,101 @@ export default function GameReviewRecap({
           {coachSummary && (
             <div className="rounded-sm border border-[rgba(232,197,71,0.15)] bg-[rgba(232,197,71,0.04)] p-4">
               <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.25em] text-gold-glow uppercase">
-                Coach overview
+                Overview
               </p>
-              <p className="mt-2 font-[family-name:var(--font-body)] text-sm leading-relaxed text-[rgba(255,255,255,0.6)]">
-                {coachSummary}
+              <p className="mt-2 text-sm leading-relaxed text-[rgba(255,255,255,0.58)]">{coachSummary}</p>
+            </div>
+          )}
+
+          {userMove && (
+            <div className="rounded-sm border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-4">
+              <p className="font-[family-name:var(--font-body)] text-sm leading-relaxed text-[rgba(255,255,255,0.62)]">
+                {userMove.insight}
               </p>
             </div>
           )}
 
-          {userMove && showPreMoveHeat && (
-            <>
-              <InsightPanel title="How to find the best move">
-                <ol className="list-decimal space-y-2 pl-4">
-                  {userMove.position.findBestMoveSteps.map((line, i) => (
-                    <li
-                      key={i}
-                      className="font-[family-name:var(--font-body)] text-sm leading-relaxed text-[rgba(255,255,255,0.58)]"
-                    >
-                      {line}
-                    </li>
-                  ))}
-                </ol>
-              </InsightPanel>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <InsightPanel title="Open files">
-                  {userMove.position.openFiles.length > 0 ||
-                  userMove.position.semiOpenFiles.length > 0 ? (
-                    <p className="font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.55)]">
-                      {userMove.position.openFiles.length > 0 && (
-                        <span className="text-[rgba(210,190,255,0.9)]">
-                          Open: {userMove.position.openFiles.join(", ")}
-                        </span>
-                      )}
-                      {userMove.position.semiOpenFiles.length > 0 && (
-                        <span className="mt-1 block text-[rgba(200,180,255,0.75)]">
-                          Semi-open: {userMove.position.semiOpenFiles.join(", ")}
-                        </span>
-                      )}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-[rgba(255,255,255,0.35)]">No open files here.</p>
-                  )}
-                </InsightPanel>
-
-                <InsightPanel title="Blind spots">
-                  {userMove.position.blindSpots.length > 0 ? (
-                    <p className="font-[family-name:var(--font-body)] text-sm text-[rgba(255,210,170,0.85)]">
-                      {userMove.position.blindSpots.join(" · ")}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-[rgba(255,255,255,0.35)]">
-                      King zone looks covered.
-                    </p>
-                  )}
-                </InsightPanel>
-              </div>
-
-              <InsightPanel title="Train this habit next game">
-                <ul className="space-y-2">
-                  {userMove.position.futureScanHabits.map((h, i) => (
-                    <li
-                      key={i}
-                      className="font-[family-name:var(--font-body)] text-xs leading-relaxed text-[rgba(232,197,71,0.8)]"
-                    >
-                      ▸ {h}
-                    </li>
-                  ))}
-                </ul>
-              </InsightPanel>
-            </>
-          )}
-
           <div className="glass-panel rounded-sm p-5">
-            {coachLoading ? (
-              <p className="animate-pulse font-[family-name:var(--font-body)] text-sm text-[rgba(0,229,255,0.5)]">
-                Coach is writing notes for this position…
-              </p>
+            {loadingPly === ply && !note ? (
+              <p className="animate-pulse text-sm text-[rgba(0,229,255,0.5)]">Loading coach note…</p>
             ) : note ? (
               <>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h4 className="font-[family-name:var(--font-display)] text-xl text-white">
-                    {note.title}
-                  </h4>
-                  <span
-                    className={`font-[family-name:var(--font-hud)] text-[7px] tracking-[0.2em] uppercase ${
-                      note.source === "gpt"
-                        ? "text-[rgba(0,229,255,0.7)]"
-                        : "text-[rgba(255,255,255,0.35)]"
-                    }`}
-                  >
-                    {note.source === "gpt" ? "GPT coach" : "Local coach"}
-                  </span>
-                </div>
-                {userMove && (
-                  <span
-                    className={`mt-2 inline-block font-[family-name:var(--font-hud)] text-sm ${GRADE_STYLES[userMove.grade].className}`}
-                  >
-                    {GRADE_STYLES[userMove.grade].label} · {userMove.accuracyPct}% accuracy ·{" "}
-                    {missSizeWord(userMove.cpLoss)} · best {userMove.bestUci}
-                  </span>
-                )}
-                <p className="mt-4 font-[family-name:var(--font-body)] text-sm leading-relaxed text-[rgba(255,255,255,0.62)]">
-                  {note.explanation}
+                <h4 className="font-[family-name:var(--font-display)] text-xl text-white">{note.title}</h4>
+                <p className="mt-3 text-sm leading-relaxed text-[rgba(255,255,255,0.6)]">{note.explanation}</p>
+                <p className="mt-3 border-t border-[rgba(255,255,255,0.06)] pt-3 text-xs italic text-[rgba(232,197,71,0.75)]">
+                  {note.teachingPoint}
                 </p>
-                <p className="mt-4 border-t border-[rgba(255,255,255,0.06)] pt-4 font-[family-name:var(--font-body)] text-xs italic leading-relaxed text-[rgba(232,197,71,0.75)]">
-                  💡 {note.teachingPoint}
-                </p>
-                {evalPt && (
-                  <p className="mt-3 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(0,229,255,0.45)]">
-                    Eval (White): {evalPt.label}
-                  </p>
-                )}
               </>
             ) : (
-              <p className="font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-                {step
-                  ? `${step.mover === "user" ? "Your" : step.mover === "chimera" ? "Opponent" : "Position"}: ${step.moveLabel}. Tap a mistake chip or scrub the timeline.`
-                  : "Select a ply to see coach notes."}
+              <p className="text-sm text-[rgba(255,255,255,0.4)]">
+                Scrub the timeline or pick a move below.
               </p>
             )}
           </div>
 
-          <div className="max-h-48 space-y-1 overflow-y-auto rounded-sm border border-[rgba(255,255,255,0.05)] p-2">
-            {report.recapSteps.map((s) => {
-              const um = report.userMoves.find((u) => u.ply === s.ply);
-              return (
-                <button
-                  key={s.ply}
-                  type="button"
-                  onClick={() => go(s.ply)}
-                  className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[11px] transition-colors ${
-                    s.ply === ply
-                      ? "bg-[rgba(0,229,255,0.12)] text-white"
-                      : "text-[rgba(255,255,255,0.45)] hover:bg-[rgba(255,255,255,0.04)]"
-                  }`}
-                >
-                  <span className="w-8 shrink-0 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.3)]">
-                    {s.ply}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-mono">{s.moveLabel}</span>
-                  {um && um.grade !== "good" && um.grade !== "brilliant" && um.grade !== "great" && (
-                    <span className={`text-[8px] ${GRADE_STYLES[um.grade].className}`}>
-                      {GRADE_STYLES[um.grade].label}
+          <div>
+            <p className="mb-2 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.25em] text-[rgba(255,255,255,0.35)] uppercase">
+              Your moves
+            </p>
+            <div className="max-h-72 space-y-1 overflow-y-auto rounded-sm border border-[rgba(255,255,255,0.06)] p-2">
+              {filteredMoves.map((m) => {
+                const meta = MOVE_GRADE_META[m.grade];
+                const active = m.ply === ply;
+                return (
+                  <button
+                    key={m.ply}
+                    type="button"
+                    onClick={() => jumpToUserMove(m)}
+                    className={`flex w-full items-center gap-3 rounded-sm px-2 py-2 text-left transition-colors ${
+                      active
+                        ? "bg-[rgba(0,229,255,0.12)]"
+                        : "hover:bg-[rgba(255,255,255,0.04)]"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border text-[10px] font-bold ${meta.borderClass} ${meta.bgClass} ${meta.textClass}`}
+                    >
+                      {meta.short}
                     </span>
-                  )}
-                </button>
-              );
-            })}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-white">
+                        <span className="text-[rgba(255,255,255,0.35)]">{Math.ceil(m.ply / 2)}.</span>{" "}
+                        {m.san ?? m.uci}
+                      </p>
+                      <p className={`text-[10px] ${meta.textClass}`}>
+                        {meta.name} · {m.accuracyPct}%
+                        {m.uci !== m.bestUci && (
+                          <span className="text-[rgba(255,255,255,0.35)]"> · best {m.bestUci}</span>
+                        )}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-sm border border-[rgba(255,255,255,0.04)] p-2">
+            <p className="mb-1 font-[family-name:var(--font-hud)] text-[7px] tracking-[0.2em] text-[rgba(255,255,255,0.25)] uppercase">
+              Full game
+            </p>
+            {report.recapSteps.map((s) => (
+              <button
+                key={s.ply}
+                type="button"
+                onClick={() => go(s.ply)}
+                className={`flex w-full gap-2 rounded-sm px-2 py-1 text-left text-[11px] ${
+                  s.ply === ply ? "bg-[rgba(0,229,255,0.1)] text-white" : "text-[rgba(255,255,255,0.4)]"
+                }`}
+              >
+                <span className="w-6 shrink-0 opacity-40">{s.ply}</span>
+                <span className="truncate font-mono">{s.moveLabel}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-function InsightPanel({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded-sm border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-4">
-      <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.28em] text-[rgba(0,229,255,0.5)] uppercase">
-        {title}
-      </p>
-      <div className="mt-3">{children}</div>
-    </div>
   );
 }
 
@@ -414,7 +351,7 @@ function NavBtn({
 }: {
   onClick: () => void;
   label: string;
-  title: string;
+  title?: string;
   disabled?: boolean;
 }) {
   return (
@@ -423,7 +360,7 @@ function NavBtn({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className="rounded-sm border border-[rgba(255,255,255,0.1)] px-3 py-2 font-[family-name:var(--font-hud)] text-[10px] text-[rgba(255,255,255,0.6)] transition-colors hover:border-[rgba(0,229,255,0.35)] disabled:opacity-30"
+      className="rounded-sm border border-[rgba(255,255,255,0.1)] px-3 py-2 text-[10px] text-[rgba(255,255,255,0.6)] hover:border-[rgba(0,229,255,0.35)] disabled:opacity-30"
     >
       {label}
     </button>

@@ -6,11 +6,13 @@ export type ReviewMode = "chimera" | "online";
 
 export type MoveGrade =
   | "brilliant"
-  | "great"
+  | "best"
+  | "excellent"
   | "good"
   | "book"
   | "inaccuracy"
   | "mistake"
+  | "miss"
   | "blunder";
 
 export interface ReviewMoveAnalysis {
@@ -104,10 +106,13 @@ export interface GameReviewReport {
   /** Average mistake size label e.g. "0.3 pawns" */
   avgMissLabel: string;
   brilliant: number;
-  great: number;
+  best: number;
+  excellent: number;
   good: number;
+  book: number;
   inaccuracies: number;
   mistakes: number;
+  misses: number;
   blunders: number;
   openingLine: string;
   phases: GamePhaseStats[];

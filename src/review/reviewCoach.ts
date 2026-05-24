@@ -86,7 +86,7 @@ function buildLocalNote(
         ? ` Blind spots: ${pos.blindSpots.slice(0, 3).join(", ")}.`
         : "";
     const gradeLine =
-      ua.grade === "brilliant" || ua.grade === "great"
+      ua.grade === "brilliant" || ua.grade === "best" || ua.grade === "excellent"
         ? "Strong choice — you stayed aligned with the engine."
         : ua.grade === "good"
           ? "Playable — small inaccuracies may exist but the position remains sound."

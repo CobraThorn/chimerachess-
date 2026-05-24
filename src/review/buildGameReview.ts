@@ -8,8 +8,6 @@ import type { StockfishEngine } from "../engine/stockfish";
 import { getEvaluation } from "../engine/stockfish";
 import {
   formatAvgMissPerMove,
-  formatEnginePreferredOver,
-  missSizeWord,
   playQualityFromAcpl,
 } from "./metricsDisplay";
 import {
@@ -17,6 +15,11 @@ import {
   averageCentipawnLoss,
   cpLossToAccuracy,
 } from "./accuracy";
+import {
+  classifyMoveGrade,
+  CP_MISTAKE,
+  insightForGrade,
+} from "./classifyMove";
 import { analyzePositionForReview } from "./positionInsights";
 import { buildRecapSteps, stateAtPly } from "./replay";
 import type {
@@ -24,45 +27,18 @@ import type {
   GamePhaseStats,
   GameReviewInput,
   GameReviewReport,
-  MoveGrade,
   ReviewMoveAnalysis,
   ReviewProgress,
 } from "./types";
 
-const USER_DEPTH = 12;
-const TIMELINE_DEPTH = 10;
+const USER_DEPTH = 14;
+const TIMELINE_DEPTH = 12;
 const START_FEN = toFen(createInitialState());
-
-function gradeFromCpLoss(cpLoss: number, playedBest: boolean): MoveGrade {
-  if (cpLoss <= 3 && playedBest) return "brilliant";
-  if (cpLoss <= 12 && playedBest) return "great";
-  if (cpLoss < 35) return "good";
-  if (cpLoss < 80) return "inaccuracy";
-  if (cpLoss < 200) return "mistake";
-  return "blunder";
-}
 
 function phaseForPly(ply: number): GamePhaseStats["phase"] {
   if (ply <= 16) return "opening";
   if (ply <= 44) return "middlegame";
   return "endgame";
-}
-
-function insightFor(
-  grade: MoveGrade,
-  cpLoss: number,
-  bestUci: string,
-  playedUci: string
-): string {
-  if (grade === "brilliant" || grade === "great") {
-    return "Precise — you matched the engine's top choice.";
-  }
-  if (grade === "good") return "Solid. The position stays close to the engine's best line.";
-  if (grade === "inaccuracy") {
-    return formatEnginePreferredOver(bestUci, playedUci, cpLoss);
-  }
-  const sized = missSizeWord(cpLoss);
-  return `${sized.charAt(0).toUpperCase()}${sized.slice(1)} — ${formatEnginePreferredOver(bestUci, playedUci, cpLoss)}`;
 }
 
 function resultLabel(result: GameReviewReport["result"], mode: GameReviewInput["mode"]): string {
@@ -75,33 +51,26 @@ function buildNarrative(report: Omit<GameReviewReport, "narrative">): string[] {
   const lines: string[] = [];
   const quality = playQualityFromAcpl(report.acpl);
   lines.push(
-    `You scored ${report.accuracy}% accuracy over ${report.userMoves.length} moves — overall play: ${quality.label} (${formatAvgMissPerMove(report.acpl)} mistake size on average).`
+    `You scored ${report.accuracy}% accuracy (${quality.label}) — ${report.best + report.excellent} best/excellent moves out of ${report.userMoves.length}.`
   );
   if (report.blunders > 0) {
     lines.push(
-      `${report.blunders} blunder${report.blunders > 1 ? "s" : ""} — tap them in the mistake rail to see heat maps and how to find the best move.`
+      `${report.blunders} blunder${report.blunders > 1 ? "s" : ""} — use the review board arrows: green = best move, red = what you played.`
     );
+  } else if (report.misses > 0) {
+    lines.push(`${report.misses} missed win${report.misses > 1 ? "s" : ""} — revisit those moments in the timeline.`);
   } else if (report.mistakes > 0) {
-    lines.push(
-      `${report.mistakes} mistake${report.mistakes > 1 ? "s" : ""} — use the recap board overlays to train your scan habits.`
-    );
-  } else if (report.accuracy >= 85) {
-    lines.push("Very clean game. Your decisions stayed close to engine top lines throughout.");
+    lines.push(`${report.mistakes} mistake${report.mistakes > 1 ? "s" : ""} to drill in training.`);
+  } else if (report.accuracy >= 90) {
+    lines.push("Clean game — your moves matched engine top lines throughout.");
   }
   const worstPhase = [...report.phases].sort((a, b) => a.avgAccuracy - b.avgAccuracy)[0];
   if (worstPhase && worstPhase.avgAccuracy < report.accuracy - 8) {
-    lines.push(
-      `Weakest phase: ${worstPhase.phase} (${worstPhase.avgAccuracy}% avg) — extra focus there in training.`
-    );
+    lines.push(`Weakest phase: ${worstPhase.phase} (${worstPhase.avgAccuracy}% avg).`);
   }
   if (report.criticalMoments.length > 0) {
     const top = report.criticalMoments[0];
-    lines.push(
-      `Turning point: move ${Math.ceil(top.ply / 2)} — ${top.insight}`
-    );
-  }
-  if (report.openingLine.trim()) {
-    lines.push(`Opening: ${report.openingLine.slice(0, 80)}${report.openingLine.length > 80 ? "…" : ""}.`);
+    lines.push(`Key moment: move ${Math.ceil(top.ply / 2)} — ${top.insight}`);
   }
   return lines.slice(0, 6);
 }
@@ -132,9 +101,9 @@ export async function buildGameReview(
     onProgress?.({ step, total: totalSteps, label });
   };
 
-  tick("Building evaluation timeline…");
+  tick("Building evaluation graph…");
   const evalTimeline: EvalPoint[] = [];
-  const timelineDepth = input.moves.length > 40 ? 8 : TIMELINE_DEPTH;
+  const timelineDepth = input.moves.length > 50 ? 10 : TIMELINE_DEPTH;
 
   for (let ply = 0; ply <= input.moves.length; ply++) {
     const fen = ply === 0 ? START_FEN : fenAfterPly(input.moves, ply);
@@ -147,11 +116,11 @@ export async function buildGameReview(
       label: formatEvalLabel(cpWhite, evalRes.isMate, evalRes.mateIn),
     });
     if (ply > 0 && ply % 4 === 0) {
-      tick(`Timeline ${ply}/${input.moves.length}`);
+      tick(`Eval ${ply}/${input.moves.length}`);
     }
   }
 
-  tick("Deep grading your moves…");
+  tick("Classifying your moves…");
   const userAnalyses: ReviewMoveAnalysis[] = [];
 
   for (let i = 0; i < input.moves.length; i++) {
@@ -173,16 +142,23 @@ export async function buildGameReview(
     );
     const cpLoss = graded?.cpLoss ?? 0;
     const playedBest = graded?.playedBest ?? false;
-    const grade = gradeFromCpLoss(cpLoss, playedBest);
+    const userEvalBefore = graded?.userEvalBeforeCp ?? 0;
+    const grade = classifyMoveGrade({
+      cpLoss,
+      playedBest,
+      ply,
+      userEvalBeforeCp: userEvalBefore,
+    });
     const beforeW = graded?.evalBeforeCpWhite ?? 0;
     const afterW = graded?.evalAfterCpWhite ?? 0;
     const accuracyPct = cpLossToAccuracy(cpLoss);
+    const bestUci = graded?.bestUci ?? m.uci;
 
     const position = analyzePositionForReview(
       stateBefore,
       input.userColor,
       m.uci,
-      graded?.bestUci ?? m.uci,
+      bestUci,
       cpLoss,
       grade
     );
@@ -196,25 +172,38 @@ export async function buildGameReview(
       grade,
       cpLoss,
       accuracyPct,
-      bestUci: graded?.bestUci ?? m.uci,
+      bestUci,
       evalBeforeWhite: beforeW,
       evalAfterWhite: afterW,
       swingCp: cpLoss,
       category: (graded?.category ?? null) as MistakeCategory | null,
-      isCritical: cpLoss >= 100,
-      insight: insightFor(grade, cpLoss, graded?.bestUci ?? m.uci, m.uci),
+      isCritical: cpLoss >= CP_MISTAKE,
+      insight: insightForGrade(grade, cpLoss, bestUci, m.uci, m.san),
       position,
     });
     tick(`Move ${userAnalyses.length}/${userMoveIndices.length}`);
   }
 
-  const counts = { brilliant: 0, great: 0, good: 0, inaccuracies: 0, mistakes: 0, blunders: 0 };
+  const counts = {
+    brilliant: 0,
+    best: 0,
+    excellent: 0,
+    good: 0,
+    book: 0,
+    inaccuracies: 0,
+    mistakes: 0,
+    misses: 0,
+    blunders: 0,
+  };
   for (const u of userAnalyses) {
     if (u.grade === "brilliant") counts.brilliant++;
-    else if (u.grade === "great") counts.great++;
+    else if (u.grade === "best") counts.best++;
+    else if (u.grade === "excellent") counts.excellent++;
     else if (u.grade === "good") counts.good++;
+    else if (u.grade === "book") counts.book++;
     else if (u.grade === "inaccuracy") counts.inaccuracies++;
     else if (u.grade === "mistake") counts.mistakes++;
+    else if (u.grade === "miss") counts.misses++;
     else counts.blunders++;
   }
 
@@ -238,17 +227,21 @@ export async function buildGameReview(
       return {
         phase: p,
         moves: v.acc.length,
-        avgAccuracy: Math.round(
-          v.acc.reduce((a, b) => a + b, 0) / v.acc.length
-        ),
+        avgAccuracy: Math.round(v.acc.reduce((a, b) => a + b, 0) / v.acc.length),
         worstLoss: v.worst,
       };
     });
 
   const criticalMoments = [...userAnalyses]
-    .filter((u) => u.isCritical || u.grade === "blunder" || u.grade === "mistake")
+    .filter(
+      (u) =>
+        u.isCritical ||
+        u.grade === "blunder" ||
+        u.grade === "mistake" ||
+        u.grade === "miss"
+    )
     .sort((a, b) => b.cpLoss - a.cpLoss)
-    .slice(0, 8);
+    .slice(0, 10);
 
   const openingLine = input.moves
     .slice(0, 10)
@@ -282,7 +275,7 @@ export async function buildGameReview(
     moves: [...input.moves],
   };
 
-  tick("Coach summary…");
+  tick("Summary…");
   const narrative = buildNarrative(base);
 
   return { ...base, narrative };

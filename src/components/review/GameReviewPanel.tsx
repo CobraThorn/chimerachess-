@@ -3,33 +3,9 @@ import type { ReactNode } from "react";
 import { useReviewCoach } from "../../hooks/useReviewCoach";
 import { formatEvalLabel } from "../../engine/analysis";
 import { cpToPawns, missSizeWord } from "../../review/metricsDisplay";
-import type { GameReviewReport, MoveGrade, ReviewProgress } from "../../review/types";
+import { MOVE_GRADE_META } from "../../review/moveGrades";
+import type { GameReviewReport, ReviewProgress } from "../../review/types";
 import GameReviewRecap from "./GameReviewRecap";
-
-const GRADE_STYLES: Record<
-  MoveGrade,
-  { label: string; className: string }
-> = {
-  brilliant: {
-    label: "!!",
-    className: "text-[rgba(0,229,255,0.95)] border-[rgba(0,229,255,0.4)]",
-  },
-  great: { label: "!", className: "text-[rgba(52,211,153,0.9)] border-[rgba(52,211,153,0.35)]" },
-  good: { label: "✓", className: "text-[rgba(255,255,255,0.7)] border-[rgba(255,255,255,0.15)]" },
-  book: { label: "📖", className: "text-[rgba(232,197,71,0.8)] border-[rgba(232,197,71,0.3)]" },
-  inaccuracy: {
-    label: "?!",
-    className: "text-[rgba(255,200,100,0.85)] border-[rgba(255,200,100,0.3)]",
-  },
-  mistake: {
-    label: "?",
-    className: "text-[rgba(255,160,80,0.9)] border-[rgba(255,160,80,0.35)]",
-  },
-  blunder: {
-    label: "??",
-    className: "text-[rgba(255,100,100,0.95)] border-[rgba(255,100,100,0.4)]",
-  },
-};
 
 interface GameReviewPanelProps {
   report: GameReviewReport | null;
@@ -200,12 +176,15 @@ export default function GameReviewPanel({
             <section className="mt-8">
               <SectionTitle>Your moves — full breakdown</SectionTitle>
               <div className="mt-2 flex flex-wrap gap-2 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.35)]">
-                <span>!! {report.brilliant}</span>
-                <span>! {report.great}</span>
-                <span>✓ {report.good}</span>
-                <span>?! {report.inaccuracies}</span>
-                <span>? {report.mistakes}</span>
-                <span>?? {report.blunders}</span>
+                {report.brilliant > 0 && <span>!! {report.brilliant}</span>}
+                {report.best > 0 && <span>★ {report.best}</span>}
+                {report.excellent > 0 && <span>! {report.excellent}</span>}
+                {report.good > 0 && <span>✓ {report.good}</span>}
+                {report.book > 0 && <span>📖 {report.book}</span>}
+                {report.inaccuracies > 0 && <span>?! {report.inaccuracies}</span>}
+                {report.mistakes > 0 && <span>? {report.mistakes}</span>}
+                {report.misses > 0 && <span>✗ {report.misses}</span>}
+                {report.blunders > 0 && <span>?? {report.blunders}</span>}
               </div>
               <div className="mt-4 max-h-80 space-y-2 overflow-y-auto pr-1">
                 {report.userMoves.map((m) => (
@@ -279,7 +258,7 @@ function CriticalCard({
 }: {
   move: GameReviewReport["criticalMoments"][0];
 }) {
-  const g = GRADE_STYLES[move.grade];
+  const g = MOVE_GRADE_META[move.grade];
   return (
     <div className="rounded-sm border border-[rgba(255,100,100,0.2)] bg-[rgba(255,80,80,0.04)] p-4">
       <div className="flex items-start justify-between gap-3">
@@ -293,9 +272,9 @@ function CriticalCard({
           </p>
         </div>
         <span
-          className={`rounded-sm border px-2 py-0.5 font-[family-name:var(--font-hud)] text-[10px] ${g.className}`}
+          className={`rounded-sm border px-2 py-0.5 font-[family-name:var(--font-hud)] text-[10px] ${g.textClass} ${g.borderClass}`}
         >
-          {g.label}
+          {g.short}
         </span>
       </div>
       <p className="mt-2 font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.5)]">
@@ -309,13 +288,13 @@ function CriticalCard({
 }
 
 function MoveRow({ move }: { move: GameReviewReport["userMoves"][0] }) {
-  const g = GRADE_STYLES[move.grade];
+  const g = MOVE_GRADE_META[move.grade];
   return (
     <div className="flex gap-3 rounded-sm border border-[rgba(255,255,255,0.04)] px-3 py-2.5">
       <span
-        className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-sm border font-[family-name:var(--font-hud)] text-[9px] ${g.className}`}
+        className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-sm border font-[family-name:var(--font-hud)] text-[9px] ${g.textClass} ${g.borderClass} ${g.bgClass}`}
       >
-        {g.label}
+        {g.short}
       </span>
       <div className="min-w-0 flex-1">
         <p className="font-[family-name:var(--font-body)] text-sm text-white">

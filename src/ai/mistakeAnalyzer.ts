@@ -1,88 +1,123 @@
+import { fromFen, makeMove, toFen, uciToMove } from "../chess";
 import { evalFromResult } from "../engine/analysis";
+import {
+  categoryFromCpLoss,
+  userCpFromWhite,
+} from "../review/classifyMove";
 import type { StockfishEngine } from "../engine/stockfish";
 import { getEvaluation, getTopMoves } from "../engine/stockfish";
 import type { MistakeCategory, MistakeRecord } from "./types";
 
-function classify(cpLoss: number): MistakeCategory | null {
-  if (cpLoss >= 500) return "blunder";
-  if (cpLoss >= 200) return "mistake";
-  if (cpLoss >= 80) return "inaccuracy";
-  return null;
+export interface UserMoveEngineGrade {
+  cpLoss: number;
+  playedBest: boolean;
+  bestUci: string;
+  secondBestUci?: string;
+  category: MistakeCategory | null;
+  evalBeforeCpWhite: number;
+  evalAfterCpWhite: number;
+  userEvalBeforeCp: number;
 }
 
-function cpLossFromEvals(
-  evalBeforeCp: number,
-  evalAfterCp: number,
-  evalBeforeMate: boolean,
-  evalAfterMate: boolean,
-  playedUci: string,
-  topMove: string | undefined,
-  topCp: number | undefined
-): number {
-  const userEvalBefore = evalBeforeCp;
-  const userEvalAfter = -evalAfterCp;
-
-  let cpLoss = userEvalBefore - userEvalAfter;
-  if (evalBeforeMate && !evalAfterMate) cpLoss = Math.max(cpLoss, 900);
-  if (topMove && topMove !== playedUci) {
-    cpLoss = Math.max(cpLoss, Math.max(0, userEvalBefore - (topCp ?? 0)));
-  }
-  return Math.round(cpLoss);
+async function evalUserCp(
+  engine: StockfishEngine,
+  fen: string,
+  depth: number
+): Promise<{ cpWhite: number; isMate: boolean; mateIn?: number }> {
+  engine.stop();
+  const res = await getEvaluation(engine, fen, depth);
+  const { cpWhite, isMate, mateIn } = evalFromResult(fen, res);
+  return { cpWhite, isMate, mateIn };
 }
 
 /**
- * Compare eval before/after the user's move (user's POV).
- * Stockfish uses a single UCI queue — never run parallel engine calls.
+ * Centipawn loss from the user's perspective — compares played line vs engine best line.
  */
+export async function computeUserMoveCpLoss(
+  engine: StockfishEngine,
+  fenBefore: string,
+  fenAfter: string,
+  playedUci: string,
+  userColor: "w" | "b",
+  depth: number
+): Promise<UserMoveEngineGrade | null> {
+  const stmBefore = fenBefore.split(" ")[1];
+  if (stmBefore !== userColor) return null;
+
+  const stateBefore = fromFen(fenBefore);
+  if (!stateBefore) return null;
+
+  const before = await evalUserCp(engine, fenBefore, depth);
+  const userBefore = userCpFromWhite(before.cpWhite, userColor);
+
+  engine.stop();
+  const topMoves = await getTopMoves(engine, fenBefore, Math.min(depth, 16), 3);
+  const top = topMoves[0];
+  const second = topMoves[1];
+
+  const after = await evalUserCp(engine, fenAfter, depth);
+  const userAfter = userCpFromWhite(after.cpWhite, userColor);
+
+  let cpLoss = Math.round(Math.max(0, userBefore - userAfter));
+  if (before.isMate && !after.isMate) cpLoss = Math.max(cpLoss, 900);
+
+  const playedBest = top?.move === playedUci;
+  const bestUci = top?.move ?? playedUci;
+
+  if (!playedBest && top?.move) {
+    const bestMove = uciToMove(stateBefore, top.move);
+    if (bestMove) {
+      const afterBestState = makeMove(stateBefore, bestMove);
+      if (afterBestState) {
+        const fenAfterBest = toFen(afterBestState);
+        const afterBest = await evalUserCp(engine, fenAfterBest, depth);
+        const userAfterBest = userCpFromWhite(afterBest.cpWhite, userColor);
+        cpLoss = Math.max(
+          cpLoss,
+          Math.round(Math.max(0, userBefore - userAfterBest))
+        );
+      }
+    }
+  }
+
+  return {
+    cpLoss,
+    playedBest,
+    bestUci,
+    secondBestUci: second?.move,
+    category: categoryFromCpLoss(cpLoss),
+    evalBeforeCpWhite: before.cpWhite,
+    evalAfterCpWhite: after.cpWhite,
+    userEvalBeforeCp: userBefore,
+  };
+}
+
 export async function analyzeUserMove(
   engine: StockfishEngine,
   fenBefore: string,
   fenAfter: string,
   playedUci: string,
   userColor: "w" | "b",
-  depth = 8
+  depth = 10
 ): Promise<MistakeRecord | null> {
-  const stmBefore = fenBefore.split(" ")[1];
-  if (stmBefore !== userColor) return null;
-
-  engine.stop();
-  const evalBefore = await getEvaluation(engine, fenBefore, depth);
-  engine.stop();
-  const evalAfter = await getEvaluation(engine, fenAfter, depth);
-  engine.stop();
-  const topMoves = await getTopMoves(engine, fenBefore, Math.min(depth, 12), 1);
-  const topBefore = topMoves[0];
-
-  const cpLoss = cpLossFromEvals(
-    evalBefore.cp,
-    evalAfter.cp,
-    evalBefore.isMate,
-    evalAfter.isMate,
+  const graded = await computeUserMoveCpLoss(
+    engine,
+    fenBefore,
+    fenAfter,
     playedUci,
-    topBefore?.move,
-    topBefore?.cp
+    userColor,
+    depth
   );
-
-  const category = classify(cpLoss);
-  if (!category) return null;
+  if (!graded?.category) return null;
 
   return {
     fenBefore,
     played: playedUci,
-    best: topBefore?.move ?? playedUci,
-    cpLoss,
-    category,
+    best: graded.bestUci,
+    cpLoss: graded.cpLoss,
+    category: graded.category,
     at: Date.now(),
   };
-}
-
-export interface UserMoveEngineGrade {
-  cpLoss: number;
-  playedBest: boolean;
-  bestUci: string;
-  category: MistakeCategory | null;
-  evalBeforeCpWhite: number;
-  evalAfterCpWhite: number;
 }
 
 /** One serial Stockfish pass per user move — used by post-game review. */
@@ -94,41 +129,16 @@ export async function gradeUserMoveForReview(
   userColor: "w" | "b",
   depth: number
 ): Promise<UserMoveEngineGrade | null> {
-  const stmBefore = fenBefore.split(" ")[1];
-  if (stmBefore !== userColor) return null;
-
-  engine.stop();
-  const evalBefore = await getEvaluation(engine, fenBefore, depth);
-  engine.stop();
-  const topMoves = await getTopMoves(engine, fenBefore, Math.min(depth, 12), 3);
-  const top = topMoves[0];
-  engine.stop();
-  const evalAfter = await getEvaluation(engine, fenAfter, depth);
-
-  const cpLoss = cpLossFromEvals(
-    evalBefore.cp,
-    evalAfter.cp,
-    evalBefore.isMate,
-    evalAfter.isMate,
+  return computeUserMoveCpLoss(
+    engine,
+    fenBefore,
+    fenAfter,
     playedUci,
-    top?.move,
-    top?.cp
+    userColor,
+    depth
   );
-
-  const beforeW = evalFromResult(fenBefore, evalBefore).cpWhite;
-  const afterW = evalFromResult(fenAfter, evalAfter).cpWhite;
-
-  return {
-    cpLoss,
-    playedBest: top?.move === playedUci,
-    bestUci: top?.move ?? playedUci,
-    category: classify(cpLoss),
-    evalBeforeCpWhite: beforeW,
-    evalAfterCpWhite: afterW,
-  };
 }
 
-/** Let game-end persistence wait for in-flight per-move analyses */
 export async function waitForPendingMistakeAnalyses(
   getPendingCount: () => number,
   maxWaitMs = 2800,

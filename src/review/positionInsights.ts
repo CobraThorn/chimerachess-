@@ -152,7 +152,7 @@ export function buildMistakeHeatSquares(
   const played = uciToMove(state, playedUci);
   const best = uciToMove(state, bestUci);
 
-  if (played && grade !== "brilliant" && grade !== "great") {
+  if (played && grade !== "brilliant" && grade !== "best" && grade !== "excellent") {
     heats.push({
       square: played.to,
       kind: "blunder",
@@ -185,7 +185,7 @@ export function buildMistakeHeatSquares(
   }
 
   const king = findKing(state, userColor);
-  if (king !== null && (grade === "mistake" || grade === "blunder")) {
+  if (king !== null && (grade === "mistake" || grade === "blunder" || grade === "miss")) {
     for (let df = -1; df <= 1; df++) {
       for (let dr = -1; dr <= 1; dr++) {
         const sq = offset(king, df, dr);

@@ -44,7 +44,7 @@ import {
   uciToMove,
 } from "../../chess";
 import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
-import { missSizeWord } from "../../review/metricsDisplay";
+import { loadChimeraSetup } from "../../chimeraSetup/storage";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
@@ -74,7 +74,6 @@ export default function ChimeraMatch() {
   } | null>(null);
   const [sfReady, setSfReady] = useState(false);
   const [chimeraThinking, setChimeraThinking] = useState(false);
-  const [lastInsight, setLastInsight] = useState<string | null>(null);
   const [gameOver, setGameOver] = useState<string | null>(null);
   const [reviewInput, setReviewInput] = useState<GameReviewInput | null>(null);
   const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
@@ -107,6 +106,10 @@ export default function ChimeraMatch() {
     () => signatureOpeningHint(toFen(state)),
     [state]
   );
+  const chimeraCodename = useMemo(
+    () => loadChimeraSetup()?.codename?.trim() || "CHIMERA",
+    []
+  );
 
   useEffect(() => {
     const engine = createStockfishEngine();
@@ -135,7 +138,6 @@ export default function ChimeraMatch() {
     setGameOver(null);
     setReviewInput(null);
     dismiss();
-    setLastInsight(null);
     gameRef.current = {
       id: crypto.randomUUID(),
       moves: [],
@@ -209,9 +211,6 @@ export default function ChimeraMatch() {
       setMemory((prev) => {
         const next = finishGame(prev, stored);
         saveMemory(next);
-        if (next.learning?.lastLesson) {
-          setLastInsight(`CHIMERA learned: ${next.learning.lastLesson}`);
-        }
         return next;
       });
       logDataEvent("game_complete", {
@@ -352,13 +351,10 @@ export default function ChimeraMatch() {
             fenAfter,
             uci,
             userColor,
-            4
+            10
           );
           if (mistake && gameRef.current) {
             gameRef.current.mistakes.push(mistake);
-            setLastInsight(
-              `CHIMERA noted your ${mistake.category}: ${mistake.played} → better ${mistake.best} (${missSizeWord(mistake.cpLoss)})`
-            );
           }
           setMemory((prev) => {
             const style = prev.userStyle ?? createPlayStyleProfile();
@@ -565,7 +561,34 @@ export default function ChimeraMatch() {
           </div>
         </div>
 
-        <div className="relative w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)]">
+        <div
+          className={`relative w-full min-w-0 max-w-[min(100%,calc(100vw-1.25rem),32rem)] rounded-sm transition-shadow duration-500 ${
+            userTurn && !gameOver && !chimeraThinking
+              ? "shadow-[0_0_48px_rgba(232,197,71,0.12)] ring-1 ring-[rgba(232,197,71,0.2)]"
+              : "ring-1 ring-[rgba(255,255,255,0.04)]"
+          }`}
+        >
+          {chimeraThinking && (
+            <motion.div
+              className="pointer-events-none absolute inset-0 z-20 rounded-sm bg-[radial-gradient(ellipse_at_50%_50%,rgba(0,229,255,0.14)_0%,transparent_70%)]"
+              animate={{ opacity: [0.4, 0.85, 0.4] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+            />
+          )}
+          {userTurn && !gameOver && !chimeraThinking && (
+            <div className="pointer-events-none absolute -top-8 left-0 right-0 z-20 text-center">
+              <span className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.35em] text-[rgba(232,197,71,0.7)] uppercase">
+                Your move
+              </span>
+            </div>
+          )}
+          {chimeraThinking && (
+            <div className="pointer-events-none absolute -top-8 left-0 right-0 z-20 text-center">
+              <span className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.35em] text-[rgba(0,229,255,0.75)] uppercase">
+                {chimeraCodename} is calculating
+              </span>
+            </div>
+          )}
           <ChessBoardGrid
             state={state}
             orientation={userColor}
@@ -611,12 +634,6 @@ export default function ChimeraMatch() {
             )}
           </AnimatePresence>
         </div>
-
-        {lastInsight && (
-          <p className="max-w-md text-center font-[family-name:var(--font-body)] text-xs text-[rgba(232,197,71,0.65)]">
-            {lastInsight}
-          </p>
-        )}
       </div>
 
       <aside className="glass-panel w-full max-w-sm rounded-sm p-6 lg:sticky lg:top-28">
