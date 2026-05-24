@@ -43,7 +43,7 @@ export function useGameReview() {
       setLoading(true);
       setReport(null);
       setError(null);
-      setProgress({ step: 0, total: 1, label: "Starting…" });
+      setProgress({ step: 0, total: 1, label: "Warming up Stockfish…" });
       try {
         engine.stop();
         const result = await buildGameReview(engine, input, setProgress);

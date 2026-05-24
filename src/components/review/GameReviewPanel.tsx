@@ -19,6 +19,8 @@ interface GameReviewPanelProps {
   loading: boolean;
   progress: ReviewProgress | null;
   error?: string | null;
+  /** True while review is queued or running (show shell before loading flips on). */
+  open?: boolean;
   onClose: () => void;
   onNewGame?: () => void;
   /** Stored game + memory enable the performance-lab intelligence layer */
@@ -31,6 +33,7 @@ export default function GameReviewPanel({
   loading,
   progress,
   error = null,
+  open = false,
   onClose,
   onNewGame,
   storedGame = null,
@@ -66,7 +69,8 @@ export default function GameReviewPanel({
 
   const coach = useReviewCoach(report, mistakesByPly);
 
-  if (!loading && !report && !error) return null;
+  const visible = open || loading || !!report || !!error;
+  if (!visible) return null;
 
   const pct = progress
     ? Math.round((progress.step / Math.max(1, progress.total)) * 100)
@@ -104,16 +108,19 @@ export default function GameReviewPanel({
           </div>
         )}
 
-        {loading && (
+        {(loading || (open && !report && !error)) && (
           <div className="py-16 text-center">
             <p className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.4em] text-[rgba(0,229,255,0.6)] uppercase">
               Game review
             </p>
             <p className="mt-4 font-[family-name:var(--font-display)] text-2xl text-gold-glow">
-              Analysing every move…
+              {loading ? "Analysing every move…" : "Starting analysis…"}
             </p>
             <p className="mt-2 font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-              {progress?.label ?? `Stockfish depth ${REVIEW_MOVE_DEPTH} — usually under 30s`}
+              {progress?.label ??
+                (loading
+                  ? `Stockfish depth ${REVIEW_MOVE_DEPTH} — usually under 30s`
+                  : "Preparing engine…")}
             </p>
             <div className="mx-auto mt-8 h-1 max-w-xs overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
               <div

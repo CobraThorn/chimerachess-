@@ -216,20 +216,41 @@ export default function ChimeraMatch() {
 
   const persistFinishedGame = useCallback((result: StoredGame["result"]) => {
     const g = gameRef.current;
-    if (!g) return;
+    if (!g || g.moves.length < 1) return;
+
+    const endedAt = Date.now();
+    const snapshotMoves = [...g.moves];
+    const snapshotMistakes = [...g.mistakes];
+
+    /** Start Stockfish review immediately — do not wait on CRS / mistake workers. */
+    setReviewInput({
+      id: g.id,
+      mode: "chimera",
+      opponentLabel: "CHIMERA",
+      userColor,
+      result,
+      startedAt: g.startedAt,
+      endedAt,
+      moves: snapshotMoves,
+      liveMistakes: snapshotMistakes,
+    });
+
     void (async () => {
       await waitForPendingMistakeAnalyses(
         () => pendingMistakeAnalysesRef.current
       );
+      const live = gameRef.current;
+      const mistakes =
+        live?.id === g.id ? [...live.mistakes] : snapshotMistakes;
       const stored: StoredGame = {
         id: g.id,
         startedAt: g.startedAt,
-        endedAt: Date.now(),
+        endedAt,
         userColor,
-        moves: g.moves,
-        mistakes: g.mistakes,
+        moves: live?.id === g.id ? [...live.moves] : snapshotMoves,
+        mistakes,
         result,
-        openingLine: g.moves
+        openingLine: (live?.id === g.id ? live.moves : snapshotMoves)
           .slice(0, 6)
           .map((m) => m.uci)
           .join(" "),
@@ -245,17 +266,6 @@ export default function ChimeraMatch() {
         result,
         moves: stored.moves.length,
         mistakes: stored.mistakes.length,
-      });
-      setReviewInput({
-        id: stored.id,
-        mode: "chimera",
-        opponentLabel: "CHIMERA",
-        userColor,
-        result: stored.result,
-        startedAt: stored.startedAt,
-        endedAt: stored.endedAt,
-        moves: [...stored.moves],
-        liveMistakes: [...stored.mistakes],
       });
       gameRef.current = null;
     })();
@@ -437,7 +447,7 @@ export default function ChimeraMatch() {
       };
 
       if (isTerminal) {
-        await recordAnalysis();
+        void recordAnalysis();
         resolveGameEnd(next);
         return;
       }
@@ -527,6 +537,7 @@ export default function ChimeraMatch() {
       loading={loading}
       progress={progress}
       error={reviewError}
+      open={!!reviewInput || loading || !!report || !!reviewError}
       memory={memory}
       storedGame={lastStoredGame}
       onClose={() => {
