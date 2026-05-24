@@ -5,7 +5,6 @@ import type {
   DataConsents,
   UserAccount,
 } from "./types";
-import { hasLegacyChimeraUsage } from "../chimeraSetup/migrate";
 import {
   ACCOUNT_EVENT,
   ACCOUNT_STORAGE_KEY,
@@ -51,20 +50,14 @@ export function markChimeraSetupComplete(): UserAccount | null {
   return updated;
 }
 
-/** Grandfather existing local players so the setup overlay does not block the whole site */
-export function migrateLegacyChimeraSetup(): UserAccount | null {
-  const account = loadAccount();
-  if (!account?.isLoggedIn || account.chimeraSetupComplete === true) {
-    return null;
-  }
-  if (!hasLegacyChimeraUsage()) return null;
-  return markChimeraSetupComplete();
-}
-
 export function needsChimeraSetup(): boolean {
-  migrateLegacyChimeraSetup();
   const account = loadAccount();
   return !!account?.isLoggedIn && account.chimeraSetupComplete !== true;
+}
+
+export function hasCompletedChimeraSetup(): boolean {
+  const account = loadAccount();
+  return !!account?.isLoggedIn && account.chimeraSetupComplete === true;
 }
 
 export function signOut(): void {

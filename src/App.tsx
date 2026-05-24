@@ -1,30 +1,37 @@
 import { useCallback, useEffect, useState } from "react";
 import { ACCOUNT_EVENT } from "./account/types";
-import { needsChimeraSetup } from "./account/storage";
-import LandingPage from "./components/LandingPage";
+import {
+  hasCompletedChimeraSetup,
+  isLoggedIn,
+  needsChimeraSetup,
+} from "./account/storage";
+import ChimeraAuthGate from "./components/auth/ChimeraAuthGate";
 import ChimeraCustomisePage from "./components/chimera/ChimeraCustomisePage";
+import LandingPage from "./components/LandingPage";
 import { CHIMERA_SETUP_EVENT, CHIMERA_OPEN_SETUP_EVENT } from "./chimeraSetup";
 
-type SetupOverlay = false | "required" | "optional";
-
 export default function App() {
-  const [setupOverlay, setSetupOverlay] = useState<SetupOverlay>(() =>
-    needsChimeraSetup() ? "required" : false
-  );
+  const [authenticated, setAuthenticated] = useState(isLoggedIn);
+  const [setupRequired, setSetupRequired] = useState(needsChimeraSetup);
+  const [setupOptional, setSetupOptional] = useState(false);
 
-  const refreshSetupGate = useCallback(() => {
-    if (needsChimeraSetup()) {
-      setSetupOverlay("required");
-    } else {
-      setSetupOverlay((prev) => (prev === "required" ? false : prev));
+  const refreshGates = useCallback(() => {
+    setAuthenticated(isLoggedIn());
+    setSetupRequired(needsChimeraSetup());
+    if (!needsChimeraSetup()) {
+      setSetupOptional(false);
     }
   }, []);
 
   useEffect(() => {
-    refreshSetupGate();
-    const onAccount = () => refreshSetupGate();
-    const onSetup = () => refreshSetupGate();
-    const openSetup = () => setSetupOverlay("optional");
+    refreshGates();
+    const onAccount = () => refreshGates();
+    const onSetup = () => refreshGates();
+    const openSetup = () => {
+      if (hasCompletedChimeraSetup()) {
+        setSetupOptional(true);
+      }
+    };
     window.addEventListener(ACCOUNT_EVENT, onAccount);
     window.addEventListener(CHIMERA_SETUP_EVENT, onSetup);
     window.addEventListener(CHIMERA_OPEN_SETUP_EVENT, openSetup);
@@ -33,20 +40,29 @@ export default function App() {
       window.removeEventListener(CHIMERA_SETUP_EVENT, onSetup);
       window.removeEventListener(CHIMERA_OPEN_SETUP_EVENT, openSetup);
     };
-  }, [refreshSetupGate]);
+  }, [refreshGates]);
+
+  if (!authenticated) {
+    return <ChimeraAuthGate onAuthenticated={refreshGates} />;
+  }
+
+  if (setupRequired) {
+    return (
+      <ChimeraCustomisePage
+        required
+        onComplete={refreshGates}
+      />
+    );
+  }
 
   return (
     <>
       <LandingPage />
-      {setupOverlay && (
+      {setupOptional && (
         <ChimeraCustomisePage
-          required={setupOverlay === "required"}
-          onComplete={() => setSetupOverlay(false)}
-          onDismiss={
-            setupOverlay === "optional"
-              ? () => setSetupOverlay(false)
-              : undefined
-          }
+          required={false}
+          onComplete={() => setSetupOptional(false)}
+          onDismiss={() => setSetupOptional(false)}
         />
       )}
     </>

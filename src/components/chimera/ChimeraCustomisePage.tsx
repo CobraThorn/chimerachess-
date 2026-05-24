@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { rollRandomPhenotype, phenotypeDisplayName } from "../../ai/learning/phenotype";
 import type { CounterStyleId } from "../../ai/learning/types";
 import type { ChimeraPhenotype } from "../../ai/learning/types";
@@ -73,9 +73,17 @@ export default function ChimeraCustomisePage({
     [phenotype]
   );
 
+  useEffect(() => {
+    if (!required) return;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [required]);
+
   const finish = async () => {
     const account = loadAccount();
-    if (!account) {
+    if (!account?.isLoggedIn) {
       setError("Sign in first to save your CHIMERA.");
       return;
     }
@@ -153,8 +161,9 @@ export default function ChimeraCustomisePage({
           Customise your CHIMERA
         </h1>
         <p className="mt-2 font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-          Your choices are saved to the cloud with your account — same CHIMERA on
-          any device after sign-in.
+          {required
+            ? "Complete every step to unlock the arena — your CHIMERA is saved to your account and the cloud."
+            : "Your choices are saved to the cloud with your account — same CHIMERA on any device after sign-in."}
         </p>
 
         <div className="mt-4 flex gap-1">

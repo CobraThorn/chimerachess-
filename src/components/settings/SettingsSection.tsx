@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { isLoggedIn } from "../../account/storage";
+import { hasCompletedChimeraSetup, isLoggedIn } from "../../account/storage";
 import { CHIMERA_OPEN_SETUP_EVENT } from "../../chimeraSetup";
 import AccountDataSection from "../account/AccountDataSection";
 import CustomisationPanel from "../customisation/CustomisationPanel";
@@ -33,7 +33,7 @@ export default function SettingsSection() {
         </p>
 
         <AccountDataSection />
-        {isLoggedIn() && (
+        {isLoggedIn() && hasCompletedChimeraSetup() && (
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event(CHIMERA_OPEN_SETUP_EVENT))}
