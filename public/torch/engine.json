@@ -1,0 +1,5 @@
+{
+  "kind": "shim",
+  "label": "CHIMERA dual engine (second Stockfish instance — replace with licensed Torch 4 when available)",
+  "version": 4
+}

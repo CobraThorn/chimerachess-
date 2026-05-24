@@ -122,8 +122,8 @@ export default function GameReviewPanel({
             <p className="mt-2 font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
               {progress?.label ??
                 (loading
-                  ? `Stockfish depth ${REVIEW_MOVE_DEPTH} — usually under 30s`
-                  : "Preparing engine…")}
+                  ? `Stockfish + dual engine · depth ${REVIEW_MOVE_DEPTH}`
+                  : "Preparing engines…")}
             </p>
             <div className="mx-auto mt-8 h-1 max-w-xs overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
               <motion.div

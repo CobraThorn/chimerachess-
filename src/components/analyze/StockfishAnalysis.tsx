@@ -17,7 +17,7 @@ import {
   runFullAnalysis,
   type LiveAnalysis,
 } from "../../engine/analysis";
-import { TORCH_VERSION } from "../../engine/torch";
+import { fetchTorchMeta, torchDisplayName } from "../../engine/torchMeta";
 import { STOCKFISH_VERSION } from "../../engine/stockfish";
 import { getTopMoves } from "../../engine/stockfish";
 import {
@@ -62,6 +62,7 @@ export default function StockfishAnalysis() {
   const [torchLine, setTorchLine] = useState<{ move: string; cp: number } | null>(
     null
   );
+  const [torchLabel, setTorchLabel] = useState("Torch 4");
 
   const {
     stockfish,
@@ -88,6 +89,10 @@ export default function StockfishAnalysis() {
     status.type === "checkmate" ||
     status.type === "stalemate" ||
     status.type === "draw";
+
+  useEffect(() => {
+    void fetchTorchMeta().then((m) => setTorchLabel(torchDisplayName(m)));
+  }, []);
 
   const runEngine = useCallback(async () => {
     const torchEng = await ensureTorch();
@@ -260,12 +265,12 @@ export default function StockfishAnalysis() {
         <div>
           <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
             CHIMERA analysis · Stockfish {STOCKFISH_VERSION}
-            {hasTorch ? ` · Torch ${TORCH_VERSION}` : ""}
+            {hasTorch ? ` · ${torchLabel}` : ""}
           </p>
           <p className="mt-1 font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.4)]">
             {hasTorch
-              ? "Pick Stockfish, Torch 4, or dual lines — integrated with game review."
-              : "Torch 4 available when you deploy /public/torch/ (see docs/TORCH.md)."}
+              ? "Dual analysis is on — pick SF 18, second engine, or both. Wired into CHIMERA game review."
+              : "Loading second engine…"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -283,7 +288,7 @@ export default function StockfishAnalysis() {
               {(
                 [
                   ["stockfish", "SF 18"],
-                  ["torch", "Torch 4"],
+                  ["torch", torchLabel],
                   ["dual", "Dual"],
                 ] as const
               ).map(([id, label]) => (
@@ -474,7 +479,7 @@ export default function StockfishAnalysis() {
                 {torchLine && engineMode === "dual" && (
                   <li className="rounded-sm border border-[rgba(255,160,60,0.25)] bg-[rgba(255,160,60,0.06)] px-3 py-2">
                     <span className="font-[family-name:var(--font-hud)] text-[7px] tracking-[0.15em] text-[rgba(255,180,80,0.85)]">
-                      Torch 4
+                      {torchLabel}
                     </span>
                     <button
                       type="button"
