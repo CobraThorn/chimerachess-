@@ -8,7 +8,7 @@ export type LegendId =
   | "tal"
   | "karpov"
   | "kasparov"
-  | "danya";
+  | "naroditsky";
 
 export type LegendBannerKind = "memorial" | "honorary";
 
@@ -219,46 +219,46 @@ export const LEGENDS: LegendProfile[] = [
     },
   },
   {
-    id: "danya",
+    id: "naroditsky",
     name: "Danya",
-    fullName: "Daniil Dubov",
-    epithet: "The Creative Provocateur",
-    years: "b. 1996",
-    country: "Russia",
+    fullName: "Daniel Naroditsky",
+    epithet: "Speed Chess Teacher & GM",
+    years: "1995–2025",
+    country: "United States",
     imageUrl:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Daniil_Dubov%2C_FIDE_World_Rapid_2021.jpg/480px-Daniil_Dubov%2C_FIDE_World_Rapid_2021.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Daniel_Naroditsky_in_2024.jpg/480px-Daniel_Naroditsky_in_2024.jpg",
     banner: {
-      kind: "honorary",
-      label: "CHIMERA honorary legend",
-      sublabel: "Creative partner · offbeat prep & rapid-fire ideas",
+      kind: "memorial",
+      label: "In memoriam",
+      sublabel: "1995 – 2025 · GM, author, and beloved chess educator",
     },
     bio: [
-      "Daniil Dubov is one of the most inventive minds in modern chess, trusted as a second in world championship camps.",
-      "He thrives in rapid and blitz, where deep home preparation meets unexpected move orders and psychological pressure.",
-      "His willingness to play anti-theoretical lines has produced wins over every elite player on the circuit.",
-      "CHIMERA celebrates Danya as our honorary legend—high pattern recognition with bold, creative risk tolerance.",
+      "Daniel \"Danya\" Naroditsky was an American grandmaster who became one of the youngest chess authors in history at age fourteen.",
+      "He thrilled millions as a streamer and commentator, blending blistering speed-chess skill with lucid, generous teaching.",
+      "His 2024 victory over Hikaru Nakamura showcased the sacrificial flair and calculation that defined his best games.",
+      "CHIMERA honors Naroditsky as a legend of the board and the classroom—pattern recognition, speed, and heart.",
     ],
     radar: {
-      tacticalVision: 92,
-      positionalUnderstanding: 84,
-      aggression: 80,
-      riskTolerance: 88,
-      endgamePrecision: 79,
-      openingPreparation: 94,
-      timeManagement: 76,
-      consistencyUnderPressure: 74,
-      patternRecognition: 93,
-      conversionAbility: 82,
+      tacticalVision: 94,
+      positionalUnderstanding: 86,
+      aggression: 88,
+      riskTolerance: 85,
+      endgamePrecision: 90,
+      openingPreparation: 82,
+      timeManagement: 97,
+      consistencyUnderPressure: 82,
+      patternRecognition: 96,
+      conversionAbility: 91,
     },
     game: {
-      title: "Modern Queen's Gambit",
-      event: "Featured classical debut",
-      year: 2021,
-      opponent: "Elite GM",
+      title: "Storm vs the World #1",
+      event: "Chess.com Main Event",
+      year: 2024,
+      opponent: "Hikaru Nakamura",
       result: "1–0",
       legendColor: "w",
-      highlightPly: 14,
-      moves: moves.danya,
+      highlightPly: 44,
+      moves: moves.naroditsky,
     },
   },
 ];
