@@ -30,7 +30,14 @@ export function squareToPercent(
 }
 
 export const DRAG_START_PX = 5;
-export const MOVE_PIECE_OPACITY = 0.34;
+
+/** Last-move square tint (where the piece was / landed). */
+export const LAST_MOVE_FROM_OPACITY = 0.34;
+export const LAST_MOVE_TO_OPACITY = 0.34;
+
+export function lastMoveSquareTint(themeLastMove: string, alpha: number): string {
+  return themeLastMove.replace(/[\d.]+\)$/, `${alpha})`);
+}
 
 /** Soft follow while dragging (low stiffness = smooth lag). */
 export const DRAG_FOLLOW_SPRING = {

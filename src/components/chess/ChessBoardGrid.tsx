@@ -11,7 +11,9 @@ import {
   DRAG_FOLLOW_SPRING,
   DRAG_LIFT_SCALE,
   DRAG_START_PX,
-  MOVE_PIECE_OPACITY,
+  LAST_MOVE_FROM_OPACITY,
+  LAST_MOVE_TO_OPACITY,
+  lastMoveSquareTint,
   squareToPercent,
 } from "./boardPointer";
 
@@ -344,8 +346,8 @@ export default function ChessBoardGrid({
             const piece = state.board[sq];
             const isLight = isLightSquare(sq);
             const isSelected = selected === sq;
-            const isLast =
-              lastMove !== null && (lastMove.from === sq || lastMove.to === sq);
+            const isLastFrom = lastMove !== null && lastMove.from === sq;
+            const isLastTo = lastMove !== null && lastMove.to === sq;
             const isLegal = legalTargets.some((m) => m.to === sq);
             const isCapture =
               isLegal &&
@@ -362,11 +364,15 @@ export default function ChessBoardGrid({
             const hideForSlide =
               slide !== null && (slide.from === sq || slide.to === sq);
 
-            const bg = isLast
-              ? boardTheme.lastMove
-              : isLight
-                ? boardTheme.lightSquare
-                : boardTheme.darkSquare;
+            const bg = isLight ? boardTheme.lightSquare : boardTheme.darkSquare;
+            const lastFromTint = lastMoveSquareTint(
+              boardTheme.lastMove,
+              LAST_MOVE_FROM_OPACITY
+            );
+            const lastToTint = lastMoveSquareTint(
+              boardTheme.lastMove,
+              LAST_MOVE_TO_OPACITY
+            );
 
             return (
               <motion.button
@@ -388,6 +394,26 @@ export default function ChessBoardGrid({
                   .join(" ")}
                 aria-label={piece ? `${piece.color} ${piece.type}` : "empty"}
               >
+                {isLastFrom && (
+                  <motion.span
+                    className="pointer-events-none absolute inset-0"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={SQUARE_TRANSITION}
+                    style={{ backgroundColor: lastFromTint }}
+                    aria-hidden
+                  />
+                )}
+                {isLastTo && (
+                  <motion.span
+                    className="pointer-events-none absolute inset-0"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={SQUARE_TRANSITION}
+                    style={{ backgroundColor: lastToTint }}
+                    aria-hidden
+                  />
+                )}
                 {isLegal && !piece && (
                   <motion.span
                     className="pointer-events-none absolute inset-0"
@@ -466,7 +492,7 @@ export default function ChessBoardGrid({
                     className="relative z-[2] flex h-[88%] w-[88%] items-center justify-center"
                     animate={{
                       scale: isSelected ? 1.06 : isDragSource ? 0.92 : 1,
-                      opacity: isDragSource ? 0.12 : 1,
+                      opacity: isDragSource ? 0.4 : 1,
                     }}
                     transition={PIECE_SPRING}
                   >
@@ -499,7 +525,6 @@ export default function ChessBoardGrid({
               top: slideDelta.origin.top,
               width: "12.5%",
               height: "12.5%",
-              opacity: MOVE_PIECE_OPACITY,
             }}
             initial={{ x: 0, y: 0 }}
             animate={{ x: slideDelta.x, y: slideDelta.y }}
@@ -522,7 +547,6 @@ export default function ChessBoardGrid({
               width: dragMeta.size,
               height: dragMeta.size,
               scale: smoothScale,
-              opacity: MOVE_PIECE_OPACITY,
             }}
           >
             <ChessPiece
