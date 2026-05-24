@@ -1,4 +1,5 @@
 import { ensureCrsState } from "../crs/profile";
+import { ensureChimeraCalibration } from "./chimeraCalibration";
 import { clampElo } from "./elo";
 import type { ChimeraMemory } from "./types";
 import { INITIAL_CHIMERA_ELO, INITIAL_USER_ELO } from "./types";
@@ -49,9 +50,17 @@ export function getChallengeFloor(memory: ChimeraMemory, user: number): number {
 /** Elo used for Stockfish limits, think time, and blunder rate. */
 export function effectiveChimeraElo(memory: ChimeraMemory): number {
   const stored = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
-  const user = getUserStrength(memory);
+  const cal = ensureChimeraCalibration(memory);
+  const user = Math.max(getUserStrength(memory), cal.perceivedUserElo);
   const floor = getChallengeFloor(memory, user);
-  return Math.min(3200, Math.max(stored, floor));
+
+  if (cal.confidence >= 0.78) {
+    return Math.min(3200, Math.max(stored, user + 25));
+  }
+
+  const blend = cal.confidence;
+  const target = Math.round(stored * blend + Math.max(stored, floor) * (1 - blend));
+  return Math.min(3200, Math.max(target, stored));
 }
 
 export function blunderRateForStrength(
@@ -119,17 +128,7 @@ export function useFullEngineStrength(targetElo: number): boolean {
   return targetElo >= 2850;
 }
 
-/** Pull stored CHIMERA rating toward challenge strength after strong players win. */
-export function nudgeStoredChimeraElo(
-  memory: ChimeraMemory,
-  storedElo: number
-): number {
-  const user = getUserStrength(memory);
-  if (user < 1200) return storedElo;
-
-  const effective = effectiveChimeraElo({ ...memory, chimeraElo: storedElo });
-  if (effective <= storedElo + 40) return storedElo;
-
-  const bump = Math.min(48, Math.floor((effective - storedElo) * 0.2));
-  return clampElo(storedElo + bump, 80, 3200);
+/** Perceived human strength from calibration (vs-CHIMERA games). */
+export function getPerceivedUserElo(memory: ChimeraMemory): number {
+  return ensureChimeraCalibration(memory).perceivedUserElo;
 }

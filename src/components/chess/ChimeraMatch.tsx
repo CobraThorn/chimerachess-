@@ -9,6 +9,8 @@ import {
   getChimeraMove,
   getTopPatterns,
   chimeraStrengthLabel,
+  calibrationStatusLabel,
+  ensureChimeraCalibration,
   effectiveChimeraElo,
   loadMemory,
   saveMemory,
@@ -110,6 +112,7 @@ export default function ChimeraMatch() {
   } | null>(null);
   const userMoveClockRef = useRef(createUserMoveClock());
   const pendingMistakeAnalysesRef = useRef(0);
+  const playedChimeraEloRef = useRef(effectiveChimeraElo(loadMemory()));
 
   const status = useMemo(() => getGameStatus(state), [state]);
   const topPatterns = useMemo(() => getTopPatterns(memory, 4), [memory]);
@@ -120,6 +123,9 @@ export default function ChimeraMatch() {
   const userElo = crs.chimeraRating;
   const crsPostGame = memory.crs?.lastPostGame;
   const chimeraElo = effectiveChimeraElo(memory);
+  const chimeraCalLabel = calibrationStatusLabel(
+    ensureChimeraCalibration(memory)
+  );
   const chimeraIdentity = memory.chimeraOpponentIdentity;
   const chimeraSub = chimeraIdentity
     ? getSubdivisionDef(chimeraIdentity.subdivision)
@@ -170,6 +176,7 @@ export default function ChimeraMatch() {
     dismiss();
     userMoveClockRef.current = createUserMoveClock();
     userMoveClockRef.current.markTurnStart();
+    playedChimeraEloRef.current = effectiveChimeraElo(memory);
     gameRef.current = {
       id: crypto.randomUUID(),
       moves: [],
@@ -177,7 +184,7 @@ export default function ChimeraMatch() {
       startedAt: Date.now(),
       userMoveTimesMs: userMoveClockRef.current.times,
     };
-  }, [dismiss]);
+  }, [dismiss, memory]);
 
   const pickColor = useCallback(
     (color: Color) => {
@@ -270,7 +277,9 @@ export default function ChimeraMatch() {
       };
       setLastStoredGame(stored);
       setMemory((prev) => {
-        let next = finishGame(prev, stored);
+        let next = finishGame(prev, stored, {
+          playedChimeraElo: playedChimeraEloRef.current,
+        });
         if (next.games.length >= 5) {
           const archive = getIntelligenceArchive(next);
           const deck = rebuildPersonalPuzzleDeck(next);
@@ -614,6 +623,7 @@ export default function ChimeraMatch() {
                 <EloBadge
                   label="CHIMERA"
                   elo={chimeraElo}
+                  sublabel={chimeraCalLabel}
                   delta={showEloDelta ? memory.lastChimeraEloChange : undefined}
                   variant="cyan"
                   size="md"

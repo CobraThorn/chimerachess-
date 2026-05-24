@@ -2,6 +2,8 @@ interface EloBadgeProps {
   label: string;
   elo: number;
   delta?: number;
+  /** e.g. "Calibrating · 42%" */
+  sublabel?: string | null;
   variant?: "gold" | "cyan" | "neutral";
   size?: "sm" | "md" | "lg";
 }
@@ -10,6 +12,7 @@ export default function EloBadge({
   label,
   elo,
   delta,
+  sublabel,
   variant = "gold",
   size = "md",
 }: EloBadgeProps) {
@@ -53,6 +56,13 @@ export default function EloBadge({
       <span className={`font-[family-name:var(--font-display)] font-bold leading-none ${sizes.elo} ${colors.text}`}>
         {elo}
       </span>
+      {sublabel && (
+        <span
+          className={`mt-0.5 max-w-[8rem] text-center font-[family-name:var(--font-hud)] text-[7px] leading-tight tracking-[0.12em] ${colors.sub}`}
+        >
+          {sublabel}
+        </span>
+      )}
       {delta !== undefined && delta !== 0 && (
         <span
           className={`mt-0.5 font-[family-name:var(--font-hud)] text-[8px] tracking-wider ${

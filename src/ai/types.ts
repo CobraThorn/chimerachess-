@@ -50,6 +50,15 @@ export interface StoredGame {
   userMoveTimesMs?: number[];
 }
 
+/** Per-player estimate of human strength + how settled CHIMERA Elo is. */
+export interface ChimeraCalibrationState {
+  perceivedUserElo: number;
+  /** 0–1 — low = still finding the right CHIMERA level */
+  confidence: number;
+  calibrationGames: number;
+  lastPlayedElo?: number;
+}
+
 export interface ChimeraMemory {
   version: 1;
   games: StoredGame[];
@@ -63,8 +72,10 @@ export interface ChimeraMemory {
   };
   /** 0–100: how well CHIMERA knows your habits (not raw engine strength) */
   adaptation: number;
-  /** CHIMERA opponent rating (starts ~250, updates after rated games) */
+  /** CHIMERA opponent rating (starts ~250, calibrates per player) */
   chimeraElo: number;
+  /** Adaptive calibration — perceived you + settled CHIMERA strength */
+  chimeraCalibration?: ChimeraCalibrationState;
   /** Vs-you CHIMERA behavioural fingerprint */
   chimeraOpponent?: PlayStyleProfile;
   /** Vs-you CHIMERA cognitive archetype (Oracle Prime, etc.) */

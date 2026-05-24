@@ -12,8 +12,11 @@ import {
   createInitialCrsState,
   ensureCrsState,
 } from "../crs/profile";
-import { nudgeStoredChimeraElo, getUserStrength } from "./chimeraStrength";
-import { clampElo, calculateEloChange, resultToScore } from "./elo";
+import {
+  calibrateAfterGame,
+  ensureChimeraCalibration,
+  isChimeraCalibrationGame,
+} from "./chimeraCalibration";
 import { learnFromGame, ensureLearning } from "./learning/learn";
 import { applyOpponentPhenotype, ensureOpponentPhenotype } from "./learning/phenotype";
 import { createPlayStyleProfile } from "./playStyle";
@@ -36,6 +39,9 @@ function migrateLegacyChimeraElo(memory: ChimeraMemory): ChimeraMemory {
     if (profile?.elo === LEGACY_CHIMERA_ELO) {
       memory[key] = { ...profile, elo: INITIAL_CHIMERA_ELO };
     }
+  }
+  if (!memory.chimeraCalibration) {
+    memory.chimeraCalibration = ensureChimeraCalibration(memory);
   }
   return memory;
 }
@@ -176,7 +182,12 @@ export function upsertPattern(
 export function finishGame(
   memory: ChimeraMemory,
   game: StoredGame,
-  crsOptions?: { mode?: CrsMode; opponentRating?: number }
+  crsOptions?: {
+    mode?: CrsMode;
+    opponentRating?: number;
+    /** Effective CHIMERA Elo at game start (for calibration). */
+    playedChimeraElo?: number;
+  }
 ): ChimeraMemory {
   const games = [...memory.games, game];
   let patterns = [...memory.patterns];
@@ -198,15 +209,33 @@ export function finishGame(
 
   let userStyle = memory.userStyle ?? createPlayStyleProfile(INITIAL_USER_ELO);
   const chimeraEloBefore = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
-  const userEloBefore = getUserStrength(memory);
-  const chimeraScore = resultToScore(game.result, false);
-  const chimeraDelta = calculateEloChange(chimeraEloBefore, userEloBefore, chimeraScore);
+  const crs = ensureCrsState(memory);
+  const playedChimeraElo =
+    crsOptions?.playedChimeraElo ??
+    crsOptions?.opponentRating ??
+    chimeraEloBefore;
+
+  let chimeraElo = chimeraEloBefore;
+  let chimeraDelta = 0;
+  let chimeraCalibration = ensureChimeraCalibration(memory);
+
+  if (isChimeraCalibrationGame(crsOptions?.mode)) {
+    const calibrated = calibrateAfterGame({
+      storedChimeraElo: chimeraEloBefore,
+      playedChimeraElo,
+      calibration: chimeraCalibration,
+      crsAnchorElo: crs.chimeraRating,
+      game,
+    });
+    chimeraElo = calibrated.newStoredElo;
+    chimeraDelta = calibrated.delta;
+    chimeraCalibration = calibrated.calibration;
+  }
+
   userStyle = {
     ...userStyle,
     games: userStyle.games + 1,
   };
-  let chimeraElo = clampElo(chimeraEloBefore + chimeraDelta, 80, 3200);
-  chimeraElo = nudgeStoredChimeraElo(memory, chimeraElo);
 
   const stats = { ...memory.stats };
   stats.totalGames += 1;
@@ -223,13 +252,16 @@ export function finishGame(
       stats,
       adaptation,
       chimeraElo,
+      chimeraCalibration,
       userStyle,
       chimera1: memory.chimera1,
       chimera2: memory.chimera2,
       mirrorStats: memory.mirrorStats,
       cognitiveIdentity: memory.cognitiveIdentity,
       lastChimeraEloChange: chimeraDelta,
-      chimeraOpponent: memory.chimeraOpponent,
+      chimeraOpponent: memory.chimeraOpponent
+        ? { ...memory.chimeraOpponent, elo: chimeraElo }
+        : memory.chimeraOpponent,
       chimeraOpponentIdentity: memory.chimeraOpponentIdentity,
       crs: memory.crs ?? ensureCrsState(memory),
       learning,

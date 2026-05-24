@@ -11,6 +11,10 @@ import {
   updateStyleFromMove,
 } from "../../ai";
 import { waitForPendingMistakeAnalyses } from "../../ai/mistakeAnalyzer";
+import {
+  calibrationStatusLabel,
+  ensureChimeraCalibration,
+} from "../../ai/chimeraCalibration";
 import { effectiveChimeraElo } from "../../ai/chimeraStrength";
 import { CHIMERA_MEMORY_EVENT } from "../../ai/types";
 import type { GameMoveRecord, MistakeRecord, StoredGame } from "../../ai/types";
@@ -142,6 +146,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   const endedRef = useRef(false);
   const reviewStartedRef = useRef(false);
   const pendingMistakeAnalysesRef = useRef(0);
+  const playedChimeraEloRef = useRef(0);
 
   const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
   const [memory, setMemory] = useState(() => loadMemory());
@@ -154,6 +159,9 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   }, []);
   const crs = ensureCrsState(memory);
   const chimeraElo = effectiveChimeraElo(memory);
+  const chimeraCalLabel = calibrationStatusLabel(
+    ensureChimeraCalibration(memory)
+  );
 
   const turn = state.turn;
   const userTurn = turn === userColor;
@@ -189,6 +197,8 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   );
 
   useEffect(() => {
+    const mem = loadMemory();
+    playedChimeraEloRef.current = effectiveChimeraElo(mem);
     gameRef.current = {
       id: `solo-${Date.now()}`,
       startedAt: Date.now(),
@@ -339,7 +349,8 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
       const mode = tcToCrsMode(tc);
       const next = finishGame(mem, stored, {
         mode,
-        opponentRating: chimeraElo,
+        opponentRating: playedChimeraEloRef.current,
+        playedChimeraElo: playedChimeraEloRef.current,
       });
       saveMemory(next);
       setMemory(next);
@@ -581,6 +592,11 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
                 <span className="block font-[family-name:var(--font-display)] text-lg text-[rgba(0,229,255,0.85)]">
                   {chimeraElo}
                 </span>
+                {chimeraCalLabel && (
+                  <span className="mt-0.5 block font-[family-name:var(--font-hud)] text-[6px] tracking-[0.12em] text-[rgba(0,229,255,0.45)]">
+                    {chimeraCalLabel}
+                  </span>
+                )}
               </div>
             </motion.div>
             <div>

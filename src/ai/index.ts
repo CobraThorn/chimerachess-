@@ -3,6 +3,7 @@ export * from "./memory";
 export * from "./mistakeAnalyzer";
 export * from "./chimeraBot";
 export * from "./chimeraStrength";
+export * from "./chimeraCalibration";
 export * from "./chimeraOpeningBook";
 export * from "./memoryRadar";
 export * from "./mirrorMemory";
