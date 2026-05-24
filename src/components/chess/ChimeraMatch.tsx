@@ -35,14 +35,15 @@ import type { ChimeraMemory, GameMoveRecord, MistakeRecord, StoredGame } from ".
 import {
   createInitialState,
   formatMove,
+  getAllLegalMoves,
   getGameStatus,
   getLegalMoves,
   makeMove,
   moveToUci,
   PROMOTION_PIECES,
   toFen,
-  uciToMove,
 } from "../../chess";
+import { resolveBotMove } from "../../chess/resolveBotMove";
 import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
 import { loadChimeraSetup } from "../../chimeraSetup/storage";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
@@ -56,6 +57,12 @@ import CrsRatingCard from "../crs/CrsRatingCard";
 
 function opponentColor(color: Color): Color {
   return color === "w" ? "b" : "w";
+}
+
+function pickFallbackUci(position: GameState): string | null {
+  const legal = getAllLegalMoves(position);
+  if (!legal.length) return null;
+  return moveToUci(legal[Math.floor(Math.random() * legal.length)]!);
 }
 
 export default function ChimeraMatch() {
@@ -79,7 +86,10 @@ export default function ChimeraMatch() {
   const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
 
   const engineRef = useRef<StockfishEngine | null>(null);
+  /** Separate worker so live mistake analysis never blocks CHIMERA's move. */
+  const mistakeEngineRef = useRef<StockfishEngine | null>(null);
   const reviewEngineRef = useRef<StockfishEngine | null>(null);
+  const chimeraTurnLockRef = useRef(false);
   const gameRef = useRef<{
     id: string;
     moves: GameMoveRecord[];
@@ -113,7 +123,9 @@ export default function ChimeraMatch() {
 
   useEffect(() => {
     const engine = createStockfishEngine();
+    const mistakeEngine = createStockfishEngine();
     engineRef.current = engine;
+    mistakeEngineRef.current = mistakeEngine;
     const t = setInterval(() => {
       if (engine.ready) {
         setSfReady(true);
@@ -122,8 +134,12 @@ export default function ChimeraMatch() {
     }, 100);
     return () => {
       clearInterval(t);
+      engine.stop();
+      mistakeEngine.stop();
       engine.quit();
+      mistakeEngine.quit();
       engineRef.current = null;
+      mistakeEngineRef.current = null;
     };
   }, []);
 
@@ -163,6 +179,7 @@ export default function ChimeraMatch() {
     if (!reviewInput) return;
 
     engineRef.current?.stop();
+    mistakeEngineRef.current?.stop();
     const engine = createStockfishEngine();
     reviewEngineRef.current = engine;
     let cancelled = false;
@@ -259,17 +276,25 @@ export default function ChimeraMatch() {
     async (current: GameState) => {
       const engine = engineRef.current;
       if (!engine?.ready || current.turn !== chimeraColor) return;
+      if (chimeraTurnLockRef.current) return;
 
+      chimeraTurnLockRef.current = true;
       setChimeraThinking(true);
       const thinkStart = Date.now();
       try {
-        const uci = await getChimeraMove(engine, current, chimeraColor, memoryRef.current, {
+        engine.stop();
+        mistakeEngineRef.current?.stop();
+
+        let uci = await getChimeraMove(engine, current, chimeraColor, memoryRef.current, {
           mirror: false,
           archetype: memoryRef.current.chimeraOpponentIdentity,
         });
-        if (!uci) return;
 
-        const move = uciToMove(current, uci);
+        let move = uci ? resolveBotMove(current, uci) : null;
+        if (!move) {
+          uci = pickFallbackUci(current);
+          move = uci ? resolveBotMove(current, uci) : null;
+        }
         if (!move) return;
 
         await waitAtLeast(thinkStart, CHIMERA_MIN_THINK_MS);
@@ -277,12 +302,13 @@ export default function ChimeraMatch() {
         const next = makeMove(current, move);
         if (!next) return;
 
+        const playedUci = moveToUci(move);
         setState(next);
         setLastMove(move);
         setLastMoveSan(formatMove(current, move));
 
         gameRef.current?.moves.push({
-          uci,
+          uci: playedUci,
           fen: toFen(next),
           by: "chimera",
           san: formatMove(current, move),
@@ -299,22 +325,33 @@ export default function ChimeraMatch() {
 
         resolveGameEnd(next);
       } finally {
+        chimeraTurnLockRef.current = false;
         setChimeraThinking(false);
       }
     },
     [resolveGameEnd, chimeraColor]
   );
 
+  const positionFen = useMemo(() => toFen(state), [state]);
+
+  /** Whenever it is CHIMERA's turn, play one move (recovers from engine stalls). */
   useEffect(() => {
-    if (!sfReady || gameOver || chimeraThinking) return;
-    if ((gameRef.current?.moves.length ?? 0) > 0) return;
+    if (!sfReady || gameOver || chimeraThinking || chimeraTurnLockRef.current) return;
     if (state.turn !== chimeraColor) return;
     void runChimeraTurn(state);
-  }, [sfReady, gameOver, chimeraThinking, chimeraColor, state.turn, runChimeraTurn]);
+  }, [
+    sfReady,
+    gameOver,
+    chimeraThinking,
+    chimeraColor,
+    state.turn,
+    positionFen,
+    runChimeraTurn,
+    state,
+  ]);
 
   const applyUserMove = useCallback(
     async (move: Move) => {
-      const engine = engineRef.current;
       const fenBefore = toFen(state);
       const next = makeMove(state, move);
       if (!next) return;
@@ -341,17 +378,18 @@ export default function ChimeraMatch() {
         st.type === "draw";
 
       const recordAnalysis = async () => {
-        if (!engine?.ready) return;
+        const analysisEngine = mistakeEngineRef.current;
+        if (!analysisEngine?.ready) return;
         const fenAfter = toFen(next);
         pendingMistakeAnalysesRef.current += 1;
         try {
           const mistake = await analyzeUserMove(
-            engine,
+            analysisEngine,
             fenBefore,
             fenAfter,
             uci,
             userColor,
-            10
+            8
           );
           if (mistake && gameRef.current) {
             gameRef.current.mistakes.push(mistake);
@@ -380,10 +418,6 @@ export default function ChimeraMatch() {
         await recordAnalysis();
         resolveGameEnd(next);
         return;
-      }
-
-      if (next.turn === chimeraColor) {
-        await runChimeraTurn(next);
       }
 
       void recordAnalysis();

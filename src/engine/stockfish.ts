@@ -140,18 +140,35 @@ export function getBestMove(
   });
 }
 
-/** Fast reply for live play — caps think time (ms). */
+/** Fast reply for live play — caps think time (ms) with a hard timeout so the queue cannot hang. */
 export function getBestMoveTimed(
   engine: StockfishEngine,
   fen: string,
-  movetimeMs = 220
+  movetimeMs = 220,
+  hardTimeoutMs?: number
 ): Promise<string> {
+  const movetime = Math.max(80, Math.round(movetimeMs));
+  const hardMs = hardTimeoutMs ?? movetime + 10_000;
+
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (move: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(hardTimer);
+      resolve(move);
+    };
+
+    const hardTimer = setTimeout(() => {
+      engine.stop();
+      finish("");
+    }, hardMs);
+
     engine.send(`position fen ${fen}`);
-    engine.send(`go movetime ${Math.max(80, Math.round(movetimeMs))}`, (out) => {
+    engine.send(`go movetime ${movetime}`, (out) => {
       const line = out.split("\n").find((l) => l.startsWith("bestmove"));
       const move = line?.split(" ")[1] ?? "";
-      resolve(move === "(none)" ? "" : move);
+      finish(move === "(none)" ? "" : move);
     });
   });
 }
