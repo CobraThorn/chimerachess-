@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, useMotionValue, useSpring } from "framer-motion";
 import { useCustomisation } from "../../customisation";
 import { isLightSquare } from "../../chess";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import ChessPiece from "./ChessPiece";
 import BoardAnnotations, { type BoardArrow } from "./BoardAnnotations";
 import { MOVE_SLIDE_MS } from "../../chess/movePacing";
+import MoveGlidePiece from "./MoveGlidePiece";
 import {
   clientToSquare,
-  DRAG_FOLLOW_SPRING,
   DRAG_LIFT_SCALE,
   DRAG_START_PX,
   LAST_MOVE_FROM_OPACITY,
   LAST_MOVE_TO_OPACITY,
   lastMoveSquareTint,
   squareToPercent,
+  squareTranslateDelta,
 } from "./boardPointer";
 
 export interface ChessBoardGridProps {
@@ -41,17 +41,9 @@ const BOARD_COMPACT_CLASS =
 const LEGAL_TINT = "rgba(120,200,140,0.14)";
 const LEGAL_CAPTURE_TINT = "rgba(255,200,100,0.12)";
 
-const SLIDE_SPRING = {
-  type: "spring" as const,
-  stiffness: 90,
-  damping: 16,
-  mass: 0.9,
-};
-
-interface DragMeta {
+interface DragVisual {
   color: Color;
   type: PieceType;
-  size: number;
 }
 
 interface SlideAnim {
@@ -86,6 +78,7 @@ export default function ChessBoardGrid({
   const interactive = !disabled && !!onSquareClick;
 
   const boardRef = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
   const dragSession = useRef<{
     sq: Square;
     startX: number;
@@ -93,21 +86,8 @@ export default function ChessBoardGrid({
     dragging: boolean;
     armed: boolean;
   } | null>(null);
-  const dragRaf = useRef<number | null>(null);
-  const pendingPointer = useRef<{ clientX: number; clientY: number } | null>(null);
 
-  const ghostX = useMotionValue(0);
-  const ghostY = useMotionValue(0);
-  const ghostScale = useMotionValue(1);
-  const smoothX = useSpring(ghostX, DRAG_FOLLOW_SPRING);
-  const smoothY = useSpring(ghostY, DRAG_FOLLOW_SPRING);
-  const smoothScale = useSpring(ghostScale, {
-    stiffness: 140,
-    damping: 18,
-    mass: 0.7,
-  });
-
-  const [dragMeta, setDragMeta] = useState<DragMeta | null>(null);
+  const [dragPiece, setDragPiece] = useState<DragVisual | null>(null);
   const [dragFromSq, setDragFromSq] = useState<Square | null>(null);
   const [slide, setSlide] = useState<SlideAnim | null>(null);
   const prevMoveKey = useRef<string | null>(null);
@@ -128,66 +108,38 @@ export default function ChessBoardGrid({
       type: landed.type,
       key: Date.now(),
     });
-    const t = window.setTimeout(() => setSlide(null), MOVE_SLIDE_MS + 80);
+    const t = window.setTimeout(() => setSlide(null), MOVE_SLIDE_MS + 40);
     return () => window.clearTimeout(t);
   }, [lastMove, state.board]);
 
-  const applyPointerToGhost = useCallback(
-    (clientX: number, clientY: number) => {
-      const el = boardRef.current;
-      const session = dragSession.current;
-      if (!el || !session) return;
+  const positionGhost = useCallback((clientX: number, clientY: number) => {
+    const board = boardRef.current;
+    const ghost = ghostRef.current;
+    if (!board || !ghost) return;
 
-      const piece = state.board[session.sq];
-      if (!piece) return;
+    const rect = board.getBoundingClientRect();
+    const size = rect.width / 8;
+    const x = clientX - rect.left - size / 2;
+    const y = clientY - rect.top - size / 2;
 
-      const rect = el.getBoundingClientRect();
-      const size = rect.width / 8;
-      const x = clientX - rect.left - size / 2;
-      const y = clientY - rect.top - size / 2;
+    ghost.style.width = `${size}px`;
+    ghost.style.height = `${size}px`;
+    ghost.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${DRAG_LIFT_SCALE})`;
+  }, []);
 
-      ghostX.set(x);
-      ghostY.set(y);
-      setDragMeta({ color: piece.color, type: piece.type, size });
+  const showGhost = useCallback(
+    (visual: DragVisual, clientX: number, clientY: number) => {
+      setDragPiece(visual);
+      positionGhost(clientX, clientY);
     },
-    [ghostX, ghostY, state.board]
+    [positionGhost]
   );
 
-  const scheduleGhostUpdate = useCallback(
-    (clientX: number, clientY: number) => {
-      pendingPointer.current = { clientX, clientY };
-      if (dragRaf.current !== null) return;
-
-      dragRaf.current = requestAnimationFrame(() => {
-        dragRaf.current = null;
-        const p = pendingPointer.current;
-        pendingPointer.current = null;
-        if (p) applyPointerToGhost(p.clientX, p.clientY);
-      });
-    },
-    [applyPointerToGhost]
-  );
-
-  const beginDragGhost = useCallback(
-    (clientX: number, clientY: number) => {
-      applyPointerToGhost(clientX, clientY);
-      ghostScale.set(DRAG_LIFT_SCALE);
-      smoothX.jump(ghostX.get());
-      smoothY.jump(ghostY.get());
-      smoothScale.jump(DRAG_LIFT_SCALE);
-    },
-    [applyPointerToGhost, ghostScale, ghostX, ghostY, smoothScale, smoothX, smoothY]
-  );
-
-  const clearDragGhost = useCallback(() => {
-    if (dragRaf.current !== null) {
-      cancelAnimationFrame(dragRaf.current);
-      dragRaf.current = null;
-    }
-    pendingPointer.current = null;
-    ghostScale.set(1);
-    setDragMeta(null);
-  }, [ghostScale]);
+  const hideGhost = useCallback(() => {
+    setDragPiece(null);
+    const ghost = ghostRef.current;
+    if (ghost) ghost.style.transform = "translate3d(0, 0, 0) scale(1)";
+  }, []);
 
   const finishPointer = useCallback(
     (clientX: number, clientY: number, fallbackSq: Square) => {
@@ -195,7 +147,7 @@ export default function ChessBoardGrid({
       dragSession.current = null;
 
       if (!session || !onSquareClick) {
-        clearDragGhost();
+        hideGhost();
         setDragFromSq(null);
         return;
       }
@@ -206,19 +158,7 @@ export default function ChessBoardGrid({
           ? clientToSquare(el.getBoundingClientRect(), clientX, clientY, flip)
           : null;
 
-      if (session.dragging && dropSq !== null && el) {
-        const rect = el.getBoundingClientRect();
-        const size = rect.width / 8;
-        const f = dropSq & 7;
-        const r = dropSq >> 3;
-        const vf = flip ? 7 - f : f;
-        const vr = flip ? r : 7 - r;
-        ghostX.set(vf * size);
-        ghostY.set(vr * size);
-        ghostScale.set(1);
-      }
-
-      clearDragGhost();
+      hideGhost();
       setDragFromSq(null);
 
       if (session.dragging && dropSq !== null) {
@@ -227,7 +167,7 @@ export default function ChessBoardGrid({
         onSquareClick(fallbackSq);
       }
     },
-    [clearDragGhost, flip, ghostScale, ghostX, ghostY, onSquareClick]
+    [flip, hideGhost, onSquareClick]
   );
 
   const onBoardPointerMove = useCallback(
@@ -243,16 +183,24 @@ export default function ChessBoardGrid({
         session.dragging = true;
         setDragFromSq(session.sq);
         onSquareClick?.(session.sq);
-        beginDragGhost(e.clientX, e.clientY);
+
+        const piece = state.board[session.sq];
+        if (piece) {
+          showGhost(
+            { color: piece.color, type: piece.type },
+            e.clientX,
+            e.clientY
+          );
+        }
         return;
       }
 
       if (session.dragging) {
         e.preventDefault();
-        scheduleGhostUpdate(e.clientX, e.clientY);
+        positionGhost(e.clientX, e.clientY);
       }
     },
-    [beginDragGhost, onSquareClick, scheduleGhostUpdate]
+    [onSquareClick, positionGhost, showGhost, state.board]
   );
 
   const onBoardPointerUp = useCallback(
@@ -288,22 +236,11 @@ export default function ChessBoardGrid({
     [interactive]
   );
 
-  const slideDelta = slide
-    ? (() => {
-        const ff = slide.from & 7;
-        const fr = slide.from >> 3;
-        const tf = slide.to & 7;
-        const tr = slide.to >> 3;
-        const vff = flip ? 7 - ff : ff;
-        const vfr = flip ? fr : 7 - fr;
-        const vtf = flip ? 7 - tf : tf;
-        const vtr = flip ? tr : 7 - tr;
-        return {
-          origin: squareToPercent(slide.from, flip),
-          x: `${(vtf - vff) * 12.5}%`,
-          y: `${(vtr - vfr) * 12.5}%`,
-        };
-      })()
+  const slideGlide = slide
+    ? {
+        ...squareToPercent(slide.from, flip),
+        ...squareTranslateDelta(slide.from, slide.to, flip),
+      }
     : null;
 
   return (
@@ -377,7 +314,7 @@ export default function ChessBoardGrid({
                 style={{ backgroundColor: bg }}
                 className={[
                   "relative flex size-full min-h-0 min-w-0 items-center justify-center overflow-hidden p-0",
-                  "select-none transition-[background-color] duration-300 ease-out",
+                  "select-none transition-[background-color] duration-200 ease-out",
                   interactive ? "cursor-grab active:cursor-grabbing" : "cursor-default",
                   isThinking && "ring-1 ring-inset ring-[rgba(0,229,255,0.25)]",
                 ]
@@ -387,14 +324,14 @@ export default function ChessBoardGrid({
               >
                 {isLastFrom && (
                   <span
-                    className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+                    className="pointer-events-none absolute inset-0"
                     style={{ backgroundColor: lastFromTint }}
                     aria-hidden
                   />
                 )}
                 {isLastTo && (
                   <span
-                    className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+                    className="pointer-events-none absolute inset-0"
                     style={{ backgroundColor: lastToTint }}
                     aria-hidden
                   />
@@ -459,15 +396,13 @@ export default function ChessBoardGrid({
                 )}
                 {piece && !hideForSlide && (
                   <div
-                    className="relative z-[2] flex h-[88%] w-[88%] items-center justify-center transition-[transform,opacity] duration-200 ease-out"
-                    style={{
-                      transform: isSelected
-                        ? "scale(1.06)"
-                        : isDragSource
-                          ? "scale(0.92)"
-                          : "scale(1)",
-                      opacity: isDragSource ? 0.4 : 1,
-                    }}
+                    className={[
+                      "relative z-[2] flex h-[88%] w-[88%] items-center justify-center",
+                      isSelected ? "scale-[1.04]" : "",
+                      isDragSource ? "invisible" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
                   >
                     <ChessPiece
                       color={piece.color}
@@ -489,46 +424,36 @@ export default function ChessBoardGrid({
           />
         )}
 
-        {slide && slideDelta && (
-          <motion.div
-            key={slide.key}
-            className="pointer-events-none absolute z-30 flex items-center justify-center will-change-transform"
-            style={{
-              left: slideDelta.origin.left,
-              top: slideDelta.origin.top,
-              width: "12.5%",
-              height: "12.5%",
-            }}
-            initial={{ x: 0, y: 0 }}
-            animate={{ x: slideDelta.x, y: slideDelta.y }}
-            transition={SLIDE_SPRING}
-          >
-            <ChessPiece
-              color={slide.color}
-              type={slide.type}
-              pieceSet={pieceSet}
-            />
-          </motion.div>
+        {slide && slideGlide && (
+          <MoveGlidePiece
+            glideKey={slide.key}
+            originLeft={slideGlide.left}
+            originTop={slideGlide.top}
+            deltaX={slideGlide.x}
+            deltaY={slideGlide.y}
+            color={slide.color}
+            type={slide.type}
+            pieceSet={pieceSet}
+          />
         )}
 
-        {dragMeta && (
-          <motion.div
-            className="pointer-events-none absolute left-0 top-0 z-40 flex items-center justify-center will-change-transform"
-            style={{
-              x: smoothX,
-              y: smoothY,
-              width: dragMeta.size,
-              height: dragMeta.size,
-              scale: smoothScale,
-            }}
-          >
+        <div
+          ref={ghostRef}
+          aria-hidden
+          className={[
+            "pointer-events-none absolute left-0 top-0 z-40 flex items-center justify-center",
+            "will-change-transform",
+            dragPiece ? "visible" : "invisible",
+          ].join(" ")}
+        >
+          {dragPiece && (
             <ChessPiece
-              color={dragMeta.color}
-              type={dragMeta.type}
+              color={dragPiece.color}
+              type={dragPiece.type}
               pieceSet={pieceSet}
             />
-          </motion.div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

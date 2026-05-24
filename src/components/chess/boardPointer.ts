@@ -29,7 +29,26 @@ export function squareToPercent(
   return { left: `${vf * 12.5}%`, top: `${vr * 12.5}%` };
 }
 
-export const DRAG_START_PX = 5;
+export function squareTranslateDelta(
+  from: Square,
+  to: Square,
+  flip: boolean
+): { x: string; y: string } {
+  const ff = from & 7;
+  const fr = from >> 3;
+  const tf = to & 7;
+  const tr = to >> 3;
+  const vff = flip ? 7 - ff : ff;
+  const vfr = flip ? fr : 7 - fr;
+  const vtf = flip ? 7 - tf : tf;
+  const vtr = flip ? tr : 7 - tr;
+  return {
+    x: `${(vtf - vff) * 12.5}%`,
+    y: `${(vtr - vfr) * 12.5}%`,
+  };
+}
+
+export const DRAG_START_PX = 4;
 
 /** Last-move square tint (where the piece was / landed). */
 export const LAST_MOVE_FROM_OPACITY = 0.34;
@@ -39,12 +58,8 @@ export function lastMoveSquareTint(themeLastMove: string, alpha: number): string
   return themeLastMove.replace(/[\d.]+\)$/, `${alpha})`);
 }
 
-/** Soft follow while dragging (low stiffness = smooth lag). */
-export const DRAG_FOLLOW_SPRING = {
-  stiffness: 68,
-  damping: 13,
-  mass: 1.05,
-  restDelta: 0.05,
-} as const;
+/** Chess.com-style move glide (~160ms ease-out). */
+export const MOVE_GLIDE_MS = 160;
+export const MOVE_GLIDE_EASE = "cubic-bezier(0.33, 0, 0.1, 1)";
 
-export const DRAG_LIFT_SCALE = 1.07;
+export const DRAG_LIFT_SCALE = 1.04;

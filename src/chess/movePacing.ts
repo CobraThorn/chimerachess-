@@ -1,6 +1,7 @@
 /** Chess.com-style pacing for CHIMERA replies */
 export const CHIMERA_MIN_THINK_MS = 420;
-export const MOVE_SLIDE_MS = 320;
+/** Match board piece glide duration in ChessBoardGrid. */
+export const MOVE_SLIDE_MS = 160;
 
 export function waitMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
