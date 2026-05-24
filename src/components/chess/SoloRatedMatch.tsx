@@ -143,6 +143,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
 
   const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
   const [memory, setMemory] = useState(() => loadMemory());
+  const [lastStoredGame, setLastStoredGame] = useState<StoredGame | null>(null);
 
   useEffect(() => {
     const sync = () => setMemory(loadMemory());
@@ -339,6 +340,8 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         opponentRating: chimeraElo,
       });
       saveMemory(next);
+      setMemory(next);
+      setLastStoredGame(stored);
       if (next.crs?.lastPostGame) {
         setCrsPostGame(next.crs.lastPostGame);
       }
@@ -522,6 +525,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         error={reviewError}
         onClose={dismiss}
         memory={memory}
+        storedGame={lastStoredGame}
       />
       <motion.div
         initial={{ opacity: 0, y: 12 }}

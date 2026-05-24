@@ -19,16 +19,12 @@ import ChessBoardGrid from "./ChessBoardGrid";
 import ChessPiece from "./ChessPiece";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
-import { loadMemory, saveMemory } from "../../ai";
-import type { StoredGame } from "../../ai/types";
+import { finishGame, loadMemory, saveMemory } from "../../ai";
+import { CHIMERA_MEMORY_EVENT, type ChimeraMemory, type StoredGame } from "../../ai/types";
 import { onlineMovesToRecords } from "../../review/buildGameReview";
 import { onlineResultToReview } from "../../review/types";
 import GameReviewPanel from "../review/GameReviewPanel";
-import {
-  applyCrsForStoredGame,
-  clearCrsPostGame,
-  tcToCrsMode,
-} from "../../crs/profile";
+import { clearCrsPostGame, tcToCrsMode } from "../../crs/profile";
 import type { CrsPostGameSummary } from "../../crs/types";
 import CrsPostGamePanel from "../crs/CrsPostGamePanel";
 
@@ -88,11 +84,20 @@ export default function OnlineMatch({
   const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
   const reviewEngineRef = useRef<StockfishEngine | null>(null);
   const reviewStartedRef = useRef(false);
+  const [memory, setMemory] = useState<ChimeraMemory>(() => loadMemory());
+  const [storedGame, setStoredGame] = useState<StoredGame | null>(null);
   const [crsPostGame, setCrsPostGame] = useState<CrsPostGameSummary | null>(null);
+
+  useEffect(() => {
+    const sync = () => setMemory(loadMemory());
+    window.addEventListener(CHIMERA_MEMORY_EVENT, sync);
+    return () => window.removeEventListener(CHIMERA_MEMORY_EVENT, sync);
+  }, []);
 
   useEffect(() => {
     reviewStartedRef.current = false;
     setCrsPostGame(null);
+    setStoredGame(null);
   }, [match.gameId]);
 
   useEffect(() => {
@@ -119,8 +124,10 @@ export default function OnlineMatch({
 
     const mem = loadMemory();
     const mode = tcToCrsMode(match.tc);
-    const next = applyCrsForStoredGame(mem, stored, mode, 1200);
+    const next = finishGame(mem, stored, { mode, opponentRating: 1200 });
     saveMemory(next);
+    setMemory(next);
+    setStoredGame(stored);
     if (next.crs?.lastPostGame) {
       setCrsPostGame(next.crs.lastPostGame);
     }
@@ -258,6 +265,8 @@ export default function OnlineMatch({
       loading={loading}
       progress={progress}
       error={reviewError}
+      memory={memory}
+      storedGame={storedGame}
       onClose={dismiss}
     />
     <div className="flex w-full max-w-5xl flex-col gap-8 lg:flex-row lg:items-start lg:justify-center">

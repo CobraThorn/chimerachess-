@@ -72,6 +72,7 @@ export default function ChimeraMatch() {
   const chimeraColor = opponentColor(userColor);
   const [state, setState] = useState<GameState>(createInitialState);
   const [memory, setMemory] = useState<ChimeraMemory>(() => loadMemory());
+  const [lastStoredGame, setLastStoredGame] = useState<StoredGame | null>(null);
   const [selected, setSelected] = useState<Square | null>(null);
   const [legalTargets, setLegalTargets] = useState<Move[]>([]);
   const [lastMove, setLastMove] = useState<Move | null>(null);
@@ -156,6 +157,7 @@ export default function ChimeraMatch() {
     setPromotionPick(null);
     setGameOver(null);
     setReviewInput(null);
+    setLastStoredGame(null);
     dismiss();
     userMoveClockRef.current = createUserMoveClock();
     userMoveClockRef.current.markTurnStart();
@@ -233,6 +235,7 @@ export default function ChimeraMatch() {
           .join(" "),
         userMoveTimesMs: [...g.userMoveTimesMs],
       };
+      setLastStoredGame(stored);
       setMemory((prev) => {
         const next = finishGame(prev, stored);
         saveMemory(next);
@@ -525,6 +528,7 @@ export default function ChimeraMatch() {
       progress={progress}
       error={reviewError}
       memory={memory}
+      storedGame={lastStoredGame}
       onClose={() => {
         dismiss();
         setReviewInput(null);

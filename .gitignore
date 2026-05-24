@@ -6,6 +6,7 @@ dist/
 server/data/
 *.log
 push-log.txt
+scripts/legend-uci-out.json
 .DS_Store
 tsconfig.tsbuildinfo
 
