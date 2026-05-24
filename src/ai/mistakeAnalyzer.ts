@@ -47,10 +47,6 @@ export async function computeUserMoveCpLoss(
   const bestUci = top?.move ?? playedUci;
 
   if (playedBest) {
-    engine.stop();
-    const afterDepth = Math.min(depth, 12);
-    const afterPlayed = await getEvaluation(engine, fenAfter, afterDepth);
-    const after = evalFromResult(fenAfter, afterPlayed);
     return {
       cpLoss: 0,
       playedBest: true,
@@ -58,7 +54,7 @@ export async function computeUserMoveCpLoss(
       secondBestUci: second?.move,
       category: null,
       evalBeforeCpWhite: before.cpWhite,
-      evalAfterCpWhite: after.cpWhite,
+      evalAfterCpWhite: before.cpWhite,
       userEvalBeforeCp: userBefore,
     };
   }

@@ -41,20 +41,12 @@ const BOARD_COMPACT_CLASS =
 const LEGAL_TINT = "rgba(120,200,140,0.14)";
 const LEGAL_CAPTURE_TINT = "rgba(255,200,100,0.12)";
 
-const PIECE_SPRING = {
-  type: "spring" as const,
-  stiffness: 160,
-  damping: 20,
-  mass: 0.8,
-};
-const SQUARE_TRANSITION = { duration: 0.38, ease: [0.16, 1, 0.3, 1] as const };
 const SLIDE_SPRING = {
   type: "spring" as const,
-  stiffness: 52,
-  damping: 11,
-  mass: 1.2,
+  stiffness: 90,
+  damping: 16,
+  mass: 0.9,
 };
-const UI_SPRING = { type: "spring" as const, stiffness: 200, damping: 22, mass: 0.65 };
 
 interface DragMeta {
   color: Color;
@@ -375,18 +367,17 @@ export default function ChessBoardGrid({
             );
 
             return (
-              <motion.button
+              <button
                 key={sq}
                 type="button"
                 disabled={!interactive}
                 onPointerDown={
                   interactive ? (e) => onSquarePointerDown(sq, e) : undefined
                 }
-                animate={{ backgroundColor: bg }}
-                transition={SQUARE_TRANSITION}
+                style={{ backgroundColor: bg }}
                 className={[
                   "relative flex size-full min-h-0 min-w-0 items-center justify-center overflow-hidden p-0",
-                  "select-none",
+                  "select-none transition-[background-color] duration-300 ease-out",
                   interactive ? "cursor-grab active:cursor-grabbing" : "cursor-default",
                   isThinking && "ring-1 ring-inset ring-[rgba(0,229,255,0.25)]",
                 ]
@@ -395,41 +386,29 @@ export default function ChessBoardGrid({
                 aria-label={piece ? `${piece.color} ${piece.type}` : "empty"}
               >
                 {isLastFrom && (
-                  <motion.span
-                    className="pointer-events-none absolute inset-0"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={SQUARE_TRANSITION}
+                  <span
+                    className="pointer-events-none absolute inset-0 transition-opacity duration-300"
                     style={{ backgroundColor: lastFromTint }}
                     aria-hidden
                   />
                 )}
                 {isLastTo && (
-                  <motion.span
-                    className="pointer-events-none absolute inset-0"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={SQUARE_TRANSITION}
+                  <span
+                    className="pointer-events-none absolute inset-0 transition-opacity duration-300"
                     style={{ backgroundColor: lastToTint }}
                     aria-hidden
                   />
                 )}
                 {isLegal && !piece && (
-                  <motion.span
+                  <span
                     className="pointer-events-none absolute inset-0"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={UI_SPRING}
                     style={{ backgroundColor: LEGAL_TINT }}
                     aria-hidden
                   />
                 )}
                 {isLegal && isCapture && (
-                  <motion.span
+                  <span
                     className="pointer-events-none absolute inset-0"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={UI_SPRING}
                     style={{ backgroundColor: LEGAL_CAPTURE_TINT }}
                     aria-hidden
                   />
@@ -457,21 +436,15 @@ export default function ChessBoardGrid({
                   />
                 )}
                 {isSelected && (
-                  <motion.span
+                  <span
                     className="pointer-events-none absolute inset-0"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={UI_SPRING}
                     style={{ boxShadow: `inset 0 0 0 2px ${boardTheme.selectedRing}` }}
                     aria-hidden
                   />
                 )}
                 {isLegal && !piece && (
-                  <motion.span
+                  <span
                     className="relative z-[1] h-[18%] w-[18%] min-h-1.5 min-w-1.5 max-h-2.5 max-w-2.5 rounded-full"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={UI_SPRING}
                     style={{
                       backgroundColor: boardTheme.legalDot,
                       boxShadow: `0 0 6px ${boardTheme.legalDot}`,
@@ -479,31 +452,31 @@ export default function ChessBoardGrid({
                   />
                 )}
                 {isLegal && isCapture && (
-                  <motion.span
-                    className="pointer-events-none absolute inset-[14%] z-[1] rounded-full border box-border"
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 0.75 }}
-                    transition={UI_SPRING}
+                  <span
+                    className="pointer-events-none absolute inset-[14%] z-[1] rounded-full border border-opacity-75 box-border"
                     style={{ borderColor: boardTheme.legalCapture }}
                   />
                 )}
                 {piece && !hideForSlide && (
-                  <motion.div
-                    className="relative z-[2] flex h-[88%] w-[88%] items-center justify-center"
-                    animate={{
-                      scale: isSelected ? 1.06 : isDragSource ? 0.92 : 1,
+                  <div
+                    className="relative z-[2] flex h-[88%] w-[88%] items-center justify-center transition-[transform,opacity] duration-200 ease-out"
+                    style={{
+                      transform: isSelected
+                        ? "scale(1.06)"
+                        : isDragSource
+                          ? "scale(0.92)"
+                          : "scale(1)",
                       opacity: isDragSource ? 0.4 : 1,
                     }}
-                    transition={PIECE_SPRING}
                   >
                     <ChessPiece
                       color={piece.color}
                       type={piece.type}
                       pieceSet={pieceSet}
                     />
-                  </motion.div>
+                  </div>
                 )}
-              </motion.button>
+              </button>
             );
           })}
         </div>

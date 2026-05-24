@@ -55,9 +55,11 @@ export function evalToBarPercent(cpWhite: number, isMate?: boolean, mateIn?: num
 }
 
 function parseInfoLine(line: string, fen: string): LiveAnalysis | null {
-  if (!line.startsWith("info ") || !line.includes(" depth ")) return null;
+  if (!line.startsWith("info ")) return null;
+  const hasScore = line.includes("score cp") || line.includes("score mate");
+  if (!hasScore) return null;
   const depthM = line.match(/\bdepth (\d+)/);
-  if (!depthM) return null;
+  const depth = depthM ? parseInt(depthM[1], 10) : 0;
 
   let stmCp = 0;
   let isMate = false;
@@ -79,7 +81,7 @@ function parseInfoLine(line: string, fen: string): LiveAnalysis | null {
   const bestMove = pvUci[0] ?? "";
 
   return {
-    depth: parseInt(depthM[1], 10),
+    depth,
     cpWhite: cpForWhite(fen, stmCp),
     isMate,
     mateIn,
@@ -167,7 +169,7 @@ export function runFullAnalysis(
       if (!line.startsWith("info ")) return;
       const parsed = parseInfoLine(line, fen);
       if (parsed) {
-        if (!primary || parsed.depth >= primary.depth) {
+        if (!primary || parsed.depth >= primary.depth || primary.depth === 0) {
           primary = parsed;
           onUpdate(parsed);
         }

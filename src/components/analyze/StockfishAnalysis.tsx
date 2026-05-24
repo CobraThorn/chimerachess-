@@ -15,7 +15,6 @@ import { useCustomisation } from "../../customisation";
 import {
   formatEvalLabel,
   runFullAnalysis,
-  stopAnalysis,
   type LiveAnalysis,
 } from "../../engine/analysis";
 import {
@@ -28,10 +27,10 @@ import ChessBoardGrid from "../chess/ChessBoardGrid";
 import ChessPiece from "../chess/ChessPiece";
 
 const DEPTH_PRESETS = [
-  { id: "fast", label: "Fast", movetimeMs: 180 },
-  { id: "standard", label: "Standard", movetimeMs: 400 },
+  { id: "fast", label: "Fast", depth: 12 },
+  { id: "standard", label: "Standard", depth: 16 },
   { id: "deep", label: "Deep", depth: 18 },
-  { id: "max", label: "Max", depth: 22 },
+  { id: "max", label: "Max", depth: 20 },
 ] as const;
 
 function uciToSanPreview(state: GameState, uci: string): string {
@@ -54,6 +53,7 @@ export default function StockfishAnalysis() {
   const [analysisOn, setAnalysisOn] = useState(true);
   const [depthPreset, setDepthPreset] = useState(0);
   const [sfReady, setSfReady] = useState(false);
+  const [engineError, setEngineError] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
   const [live, setLive] = useState<LiveAnalysis | null>(null);
   const [topMoves, setTopMoves] = useState<{ move: string; cp: number }[]>([]);
@@ -63,12 +63,11 @@ export default function StockfishAnalysis() {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const analysisMode = useMemo(() => {
-    const preset = DEPTH_PRESETS[depthPreset];
-    return "movetimeMs" in preset
-      ? ({ kind: "movetime" as const, movetimeMs: preset.movetimeMs })
-      : ({ kind: "depth" as const, depth: preset.depth });
-  }, [depthPreset]);
+  const analysisMode = useMemo(
+    () => ({ kind: "depth" as const, depth: DEPTH_PRESETS[depthPreset].depth }),
+    [depthPreset]
+  );
+  const analysisGen = useRef(0);
   const status = useMemo(() => getGameStatus(state), [state]);
   const fen = useMemo(() => toFen(state), [state]);
   const gameOver =
@@ -79,10 +78,19 @@ export default function StockfishAnalysis() {
   useEffect(() => {
     const engine = createStockfishEngine();
     engineRef.current = engine;
+    setEngineError(null);
+    const deadline = Date.now() + 20_000;
     const t = setInterval(() => {
       if (engine.ready) {
         setSfReady(true);
         clearInterval(t);
+        return;
+      }
+      if (Date.now() > deadline) {
+        clearInterval(t);
+        setEngineError(
+          "Stockfish failed to load — hard-refresh or check /stockfish/ assets."
+        );
       }
     }, 100);
     return () => {
@@ -90,6 +98,7 @@ export default function StockfishAnalysis() {
       cancelRef.current?.();
       engine.quit();
       engineRef.current = null;
+      setSfReady(false);
     };
   }, []);
 
@@ -97,12 +106,14 @@ export default function StockfishAnalysis() {
     const engine = engineRef.current;
     if (!engine?.ready || !analysisOn || gameOver) {
       setThinking(false);
-      setLive(null);
-      setTopMoves([]);
+      if (gameOver) {
+        setTopMoves([]);
+      }
       return;
     }
 
     cancelRef.current?.();
+    const gen = ++analysisGen.current;
     setThinking(true);
     const targetFen = toFen(stateRef.current);
 
@@ -111,6 +122,7 @@ export default function StockfishAnalysis() {
       targetFen,
       analysisMode,
       (update) => {
+        if (analysisGen.current !== gen) return;
         if (toFen(stateRef.current) === targetFen) {
           setLive(update);
         }
@@ -120,7 +132,9 @@ export default function StockfishAnalysis() {
 
     try {
       const result = await done;
+      if (analysisGen.current !== gen) return;
       if (toFen(stateRef.current) === targetFen) {
+        if (result.primary) setLive(result.primary);
         setTopMoves(
           result.lines.map((l) => ({
             move: l.move,
@@ -129,7 +143,7 @@ export default function StockfishAnalysis() {
         );
       }
     } finally {
-      if (toFen(stateRef.current) === targetFen) {
+      if (analysisGen.current === gen) {
         setThinking(false);
       }
     }
@@ -139,11 +153,10 @@ export default function StockfishAnalysis() {
     if (!sfReady) return;
     const debounce = window.setTimeout(() => {
       void runEngine();
-    }, 100);
+    }, 220);
     return () => {
       clearTimeout(debounce);
       cancelRef.current?.();
-      stopAnalysis(engineRef.current!);
     };
   }, [fen, sfReady, runEngine]);
 
@@ -231,11 +244,15 @@ export default function StockfishAnalysis() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!sfReady && (
+          {engineError ? (
+            <span className="max-w-xs font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,120,120,0.85)]">
+              {engineError}
+            </span>
+          ) : !sfReady ? (
             <span className="font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.3)]">
               Loading engine…
             </span>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={() => setAnalysisOn((v) => !v)}

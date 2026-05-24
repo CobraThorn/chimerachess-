@@ -23,8 +23,15 @@ export function useGameReview() {
         setError("No moves to review.");
         return;
       }
-      if (!engine?.ready) {
-        setError("Engine not ready — try closing and reopening the review.");
+      if (!engine) {
+        setError("Engine not available.");
+        return;
+      }
+      const ready = await waitForEngineReady(engine, 25_000);
+      if (!ready) {
+        setError(
+          "Stockfish did not start in time — refresh the page and try again."
+        );
         return;
       }
 
@@ -58,4 +65,17 @@ export function useGameReview() {
   );
 
   return { report, loading, progress, error, runReview, dismiss };
+}
+
+async function waitForEngineReady(
+  engine: StockfishEngine,
+  timeoutMs: number
+): Promise<boolean> {
+  if (engine.ready) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (engine.ready) return true;
+    await new Promise((r) => setTimeout(r, 80));
+  }
+  return engine.ready;
 }

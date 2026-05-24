@@ -180,6 +180,7 @@ export default function ChimeraMatch() {
 
     engineRef.current?.stop();
     mistakeEngineRef.current?.stop();
+    pendingMistakeAnalysesRef.current = 0;
     const engine = createStockfishEngine();
     reviewEngineRef.current = engine;
     let cancelled = false;

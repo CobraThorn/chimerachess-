@@ -45,6 +45,13 @@ export function createStockfishEngine(): StockfishEngine {
   let analysisHook: StockfishCallback | null = null;
   let ready = false;
 
+  const flushQueue = () => {
+    while (queue.length) {
+      const head = queue.shift()!;
+      if (head.onComplete) head.onComplete(head.lines.join("\n"));
+    }
+  };
+
   const dispatchLine = (line: string) => {
     analysisHook?.(line);
     for (const fn of lineListeners) fn(line);
@@ -55,7 +62,6 @@ export function createStockfishEngine(): StockfishEngine {
 
     head.lines.push(line);
     if (isCommandDone(head.cmd, line)) {
-      head.done = true;
       queue.shift();
       if (head.onComplete) head.onComplete(head.lines.join("\n"));
     }
@@ -104,6 +110,7 @@ export function createStockfishEngine(): StockfishEngine {
 
     stop() {
       sendRaw("stop");
+      flushQueue();
     },
 
     quit() {
@@ -111,7 +118,7 @@ export function createStockfishEngine(): StockfishEngine {
       worker.terminate();
       lineListeners = [];
       analysisHook = null;
-      queue.length = 0;
+      flushQueue();
     },
   };
 
