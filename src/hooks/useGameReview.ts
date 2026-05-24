@@ -27,6 +27,10 @@ export function useGameReview() {
         setError("Engine not available.");
         return;
       }
+      if (engine.loadFailed) {
+        setError("Stockfish failed to load — refresh and try again.");
+        return;
+      }
       const ready = await waitForEngineReady(engine, 25_000);
       if (!ready) {
         setError(

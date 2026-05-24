@@ -86,7 +86,7 @@ export default function StockfishAnalysis() {
         clearInterval(t);
         return;
       }
-      if (Date.now() > deadline) {
+      if (engine.loadFailed || Date.now() > deadline) {
         clearInterval(t);
         setEngineError(
           "Stockfish failed to load — hard-refresh or check /stockfish/ assets."
@@ -314,7 +314,7 @@ export default function StockfishAnalysis() {
                 boardSize="min(calc(100vw - 3.5rem), 32rem)"
               />
             )}
-            <div className="w-[min(calc(100vw-3.5rem),32rem)] min-w-[260px] shrink-0 max-lg:mx-auto">
+            <div className="relative w-[min(calc(100vw-3.5rem),32rem)] min-w-[260px] shrink-0 max-lg:mx-auto">
               <ChessBoardGrid
                 state={state}
                 orientation={orientation}

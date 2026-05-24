@@ -85,6 +85,7 @@ export default function ChessBoardGrid({
     startY: number;
     dragging: boolean;
     armed: boolean;
+    piece: { color: Color; type: PieceType } | null;
   } | null>(null);
 
   const [dragPiece, setDragPiece] = useState<DragVisual | null>(null);
@@ -184,13 +185,9 @@ export default function ChessBoardGrid({
         setDragFromSq(session.sq);
         onSquareClick?.(session.sq);
 
-        const piece = state.board[session.sq];
+        const piece = session.piece ?? state.board[session.sq];
         if (piece) {
-          showGhost(
-            { color: piece.color, type: piece.type },
-            e.clientX,
-            e.clientY
-          );
+          showGhost(piece, e.clientX, e.clientY);
         }
         return;
       }
@@ -200,7 +197,7 @@ export default function ChessBoardGrid({
         positionGhost(e.clientX, e.clientY);
       }
     },
-    [onSquareClick, positionGhost, showGhost, state.board]
+    [onSquareClick, positionGhost, showGhost]
   );
 
   const onBoardPointerUp = useCallback(
@@ -220,12 +217,14 @@ export default function ChessBoardGrid({
   const onSquarePointerDown = useCallback(
     (sq: Square, e: React.PointerEvent) => {
       if (!interactive || e.button !== 0) return;
+      const piece = state.board[sq];
       dragSession.current = {
         sq,
         startX: e.clientX,
         startY: e.clientY,
         dragging: false,
         armed: true,
+        piece: piece ? { color: piece.color, type: piece.type } : null,
       };
       try {
         boardRef.current?.setPointerCapture(e.pointerId);
@@ -233,7 +232,7 @@ export default function ChessBoardGrid({
         /* ignore */
       }
     },
-    [interactive]
+    [interactive, state.board]
   );
 
   const slideGlide = slide
@@ -441,17 +440,19 @@ export default function ChessBoardGrid({
           ref={ghostRef}
           aria-hidden
           className={[
-            "pointer-events-none absolute left-0 top-0 z-40 flex items-center justify-center",
+            "pointer-events-none absolute left-0 top-0 z-40 flex h-0 w-0 items-center justify-center",
             "will-change-transform",
             dragPiece ? "visible" : "invisible",
           ].join(" ")}
         >
           {dragPiece && (
-            <ChessPiece
-              color={dragPiece.color}
-              type={dragPiece.type}
-              pieceSet={pieceSet}
-            />
+            <div className="flex h-[88%] w-[88%] items-center justify-center">
+              <ChessPiece
+                color={dragPiece.color}
+                type={dragPiece.type}
+                pieceSet={pieceSet}
+              />
+            </div>
           )}
         </div>
       </div>

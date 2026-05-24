@@ -14,12 +14,15 @@ function pointFromCp(ply: number, cpWhite: number, isMate = false, mateIn?: numb
 
 /** Fill gaps with linear interpolation between engine-known plies. */
 function interpolateGaps(points: (EvalPoint | null)[]): EvalPoint[] {
-  const out: EvalPoint[] = [];
-  for (let i = 0; i < points.length; i++) {
-    out.push(points[i] ?? pointFromCp(i, 0));
+  const out: EvalPoint[] = points.map((p, i) => p ?? pointFromCp(i, 0));
+
+  let firstKnown = out.findIndex((_, i) => points[i] !== null);
+  if (firstKnown < 0) return out;
+  for (let i = 0; i < firstKnown; i++) {
+    out[i] = { ...out[firstKnown]!, ply: i };
   }
 
-  let i = 0;
+  let i = firstKnown;
   while (i < points.length) {
     if (points[i] !== null) {
       i += 1;
@@ -27,23 +30,32 @@ function interpolateGaps(points: (EvalPoint | null)[]): EvalPoint[] {
     }
 
     let prevIdx = i - 1;
-    while (prevIdx >= 0 && points[prevIdx] === null) prevIdx -= 1;
-
     let nextIdx = i;
     while (nextIdx < points.length && points[nextIdx] === null) nextIdx += 1;
 
-    const prevCp = prevIdx >= 0 ? out[prevIdx].cpWhite : out[0]?.cpWhite ?? 0;
+    const prevCp = out[prevIdx]?.cpWhite ?? 0;
     const nextCp =
-      nextIdx < points.length ? out[nextIdx].cpWhite : prevCp;
-    const start = prevIdx >= 0 ? prevIdx : 0;
-    const end = nextIdx < points.length ? nextIdx : points.length - 1;
-    const span = Math.max(1, end - start);
+      nextIdx < points.length ? out[nextIdx]!.cpWhite : prevCp;
+    const span = Math.max(1, nextIdx - prevIdx);
 
-    for (let j = start + 1; j < end; j++) {
-      const t = (j - start) / span;
+    for (let j = prevIdx + 1; j < nextIdx; j++) {
+      const t = (j - prevIdx) / span;
       out[j] = pointFromCp(j, Math.round(prevCp + (nextCp - prevCp) * t));
     }
     i = nextIdx >= points.length ? points.length : nextIdx;
+  }
+
+  let lastKnown = -1;
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i] !== null) {
+      lastKnown = i;
+      break;
+    }
+  }
+  if (lastKnown >= 0) {
+    for (let i = lastKnown + 1; i < points.length; i++) {
+      out[i] = { ...out[lastKnown]!, ply: i };
+    }
   }
 
   return out;

@@ -35,12 +35,18 @@ export default function MoveGlidePiece({
     el.style.transition = "none";
     el.style.transform = "translate3d(0, 0, 0)";
 
-    const raf = requestAnimationFrame(() => {
-      el.style.transition = `transform ${MOVE_GLIDE_MS}ms ${MOVE_GLIDE_EASE}`;
-      el.style.transform = `translate3d(${deltaX}, ${deltaY}, 0)`;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        el.style.transition = `transform ${MOVE_GLIDE_MS}ms ${MOVE_GLIDE_EASE}`;
+        el.style.transform = `translate3d(${deltaX}, ${deltaY}, 0)`;
+      });
     });
 
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
   }, [glideKey, deltaX, deltaY]);
 
   return (

@@ -10,9 +10,12 @@ export interface StockfishEngine {
   onLine: (cb: StockfishCallback) => void;
   /** Single hook for live analysis info lines (replaced each run). */
   setAnalysisHook: (cb: StockfishCallback | null) => void;
+  /** Ignore stale bestmove/info from a prior search. */
+  invalidateAnalysisHook: () => void;
   stop: () => void;
   quit: () => void;
   readonly ready: boolean;
+  readonly loadFailed: boolean;
 }
 
 const ENGINE_URL = "/stockfish/stockfish-18-lite-single.js";
@@ -43,7 +46,9 @@ export function createStockfishEngine(): StockfishEngine {
   const queue: PendingCommand[] = [];
   let lineListeners: StockfishCallback[] = [];
   let analysisHook: StockfishCallback | null = null;
+  let hookGeneration = 0;
   let ready = false;
+  let loadFailed = false;
 
   const flushQueue = () => {
     while (queue.length) {
@@ -67,6 +72,10 @@ export function createStockfishEngine(): StockfishEngine {
     }
   };
 
+  worker.onerror = () => {
+    loadFailed = true;
+  };
+
   worker.onmessage = (e: MessageEvent<string>) => {
     const data = typeof e.data === "string" ? e.data : String(e.data);
     if (data.includes("\n")) {
@@ -81,6 +90,10 @@ export function createStockfishEngine(): StockfishEngine {
   const engine: StockfishEngine = {
     get ready() {
       return ready;
+    },
+
+    get loadFailed() {
+      return loadFailed;
     },
 
     send(cmd: string, onComplete?: (output: string) => void) {
@@ -105,18 +118,31 @@ export function createStockfishEngine(): StockfishEngine {
     },
 
     setAnalysisHook(cb) {
-      analysisHook = cb;
+      const gen = ++hookGeneration;
+      if (!cb) {
+        analysisHook = null;
+        return;
+      }
+      analysisHook = (line) => {
+        if (gen !== hookGeneration) return;
+        cb(line);
+      };
+    },
+
+    invalidateAnalysisHook() {
+      hookGeneration += 1;
+      analysisHook = null;
     },
 
     stop() {
       sendRaw("stop");
-      flushQueue();
     },
 
     quit() {
       sendRaw("quit");
       worker.terminate();
       lineListeners = [];
+      hookGeneration += 1;
       analysisHook = null;
       flushQueue();
     },
@@ -138,6 +164,7 @@ export function getBestMove(
   depth = 12
 ): Promise<string> {
   return new Promise((resolve) => {
+    engine.stop();
     engine.send(`position fen ${fen}`);
     engine.send(`go depth ${depth}`, (out) => {
       const line = out.split("\n").find((l) => l.startsWith("bestmove"));
@@ -171,6 +198,7 @@ export function getBestMoveTimed(
       finish("");
     }, hardMs);
 
+    engine.stop();
     engine.send(`position fen ${fen}`);
     engine.send(`go movetime ${movetime}`, (out) => {
       const line = out.split("\n").find((l) => l.startsWith("bestmove"));
@@ -271,6 +299,7 @@ export function getEvaluation(
   depth = 10
 ): Promise<EvalResult> {
   return new Promise((resolve) => {
+    engine.stop();
     engine.send(`position fen ${fen}`);
     engine.send(`go depth ${depth}`, (out) => {
       resolve(parseEvalFromOutput(out));
@@ -286,6 +315,7 @@ export function searchPosition(
   multiPv: number
 ): Promise<{ eval: EvalResult; topMoves: { move: string; cp: number }[] }> {
   return new Promise((resolve) => {
+    engine.stop();
     engine.send(`setoption name MultiPV value ${multiPv}`);
     engine.send(`position fen ${fen}`);
     engine.send(`go depth ${depth}`, (out) => {

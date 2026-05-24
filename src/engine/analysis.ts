@@ -114,7 +114,7 @@ export function runLiveAnalysis(
   return {
     cancel: () => {
       cancelled = true;
-      engine.setAnalysisHook(null);
+      engine.invalidateAnalysisHook();
       engine.stop();
     },
   };
@@ -133,7 +133,10 @@ export type AnalysisGoMode =
   | { kind: "depth"; depth: number }
   | { kind: "movetime"; movetimeMs: number };
 
-/** One Stockfish run: live eval + top 3 moves (no overlapping `go` commands). */
+const ANALYSIS_MULTIPV = 2;
+const ANALYSIS_TIMEOUT_MS = 45_000;
+
+/** One Stockfish run: live eval + top lines (serial, no overlapping `go`). */
 export function runFullAnalysis(
   engine: StockfishEngine,
   fen: string,
@@ -150,19 +153,36 @@ export function runFullAnalysis(
 
   let settle: ((r: FullAnalysisResult) => void) | null = null;
 
+  const finish = (result: FullAnalysisResult) => {
+    if (!settle) return;
+    const s = settle;
+    settle = null;
+    clearTimeout(timeoutId);
+    s(result);
+  };
+
+  const timeoutId = setTimeout(() => {
+    if (cancelled || !settle) return;
+    engine.invalidateAnalysisHook();
+    engine.stop();
+    finish({ primary, lines: [...lineMap.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v) });
+  }, ANALYSIS_TIMEOUT_MS);
+
   const done = new Promise<FullAnalysisResult>((resolve) => {
     settle = resolve;
+
+    engine.invalidateAnalysisHook();
+    engine.stop();
     engine.setAnalysisHook((line) => {
       if (cancelled) return;
 
       if (line.startsWith("bestmove")) {
-        engine.setAnalysisHook(null);
+        engine.invalidateAnalysisHook();
         engine.send("setoption name MultiPV value 1");
         const lines = [...lineMap.entries()]
           .sort((a, b) => a[0] - b[0])
           .map(([, v]) => v);
-        settle?.({ primary, lines });
-        settle = null;
+        finish({ primary, lines });
         return;
       }
 
@@ -175,13 +195,13 @@ export function runFullAnalysis(
         }
       }
 
+      const pvM = line.match(/\spv\s+(\S+)/);
+      if (!pvM) return;
+
       const mpvM = line.match(/\bmultipv (\d+)/);
+      const idx = mpvM ? parseInt(mpvM[1], 10) : 1;
       const cpM = line.match(/score cp (-?\d+)/);
       const mateM = line.match(/score mate (-?\d+)/);
-      const pvM = line.match(/\spv\s+(\S+)/);
-      if (!mpvM || !pvM) return;
-
-      const idx = parseInt(mpvM[1], 10);
       let stmCp = 0;
       if (mateM) {
         const mateIn = parseInt(mateM[1], 10);
@@ -196,8 +216,7 @@ export function runFullAnalysis(
       });
     });
 
-    engine.stop();
-    engine.send("setoption name MultiPV value 3");
+    engine.send(`setoption name MultiPV value ${ANALYSIS_MULTIPV}`);
     engine.send(`position fen ${fen}`);
     engine.send(goCmd);
   });
@@ -205,11 +224,10 @@ export function runFullAnalysis(
   return {
     cancel: () => {
       cancelled = true;
-      engine.setAnalysisHook(null);
+      engine.invalidateAnalysisHook();
       engine.send("setoption name MultiPV value 1");
       engine.stop();
-      settle?.({ primary: null, lines: [] });
-      settle = null;
+      finish({ primary: null, lines: [] });
     },
     done,
   };
