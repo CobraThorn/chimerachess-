@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCustomisation } from "../../customisation";
 import {
   createInitialState,
@@ -105,6 +105,23 @@ export default function ChessBoard({
     [state, updateState]
   );
 
+  const onPiecePress = useCallback(
+    (sq: Square) => {
+      if (status.type === "checkmate" || status.type === "stalemate" || status.type === "draw") {
+        return;
+      }
+      if (promotionPick) return;
+      const piece = state.board[sq];
+      if (!piece || piece.color !== state.turn) return;
+      if (selected === sq && legalTargets.length > 0) return;
+      startTransition(() => {
+        setSelected(sq);
+        setLegalTargets(getLegalMoves(state, sq));
+      });
+    },
+    [status.type, promotionPick, state, selected, legalTargets.length]
+  );
+
   const onSquareClick = (sq: Square) => {
     if (status.type === "checkmate" || status.type === "stalemate" || status.type === "draw") {
       return;
@@ -126,6 +143,7 @@ export default function ChessBoard({
     }
 
     if (piece && piece.color === state.turn) {
+      if (selected === sq && legalTargets.length > 0) return;
       setSelected(sq);
       setLegalTargets(getLegalMoves(state, sq));
       return;
@@ -207,6 +225,7 @@ export default function ChessBoard({
           legalTargets={legalTargets}
           lastMove={lastMove}
           onSquareClick={onSquareClick}
+          onPiecePress={onPiecePress}
         />
 
         <AnimatePresence>

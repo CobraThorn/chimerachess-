@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { logDataEvent } from "../../account/events";
 import { waitForPendingMistakeAnalyses } from "../../ai/mistakeAnalyzer";
 import {
@@ -473,6 +473,29 @@ export default function ChimeraMatch() {
     [state, runChimeraTurn, resolveGameEnd, userColor, chimeraColor]
   );
 
+  const onPiecePress = useCallback(
+    (sq: Square) => {
+      if (!userTurn || chimeraThinking || gameOver || promotionPick) return;
+      const piece = state.board[sq];
+      if (!piece || piece.color !== userColor) return;
+      if (selected === sq && legalTargets.length > 0) return;
+      startTransition(() => {
+        setSelected(sq);
+        setLegalTargets(getLegalMoves(state, sq));
+      });
+    },
+    [
+      userTurn,
+      chimeraThinking,
+      gameOver,
+      promotionPick,
+      state,
+      userColor,
+      selected,
+      legalTargets.length,
+    ]
+  );
+
   const onSquareClick = (sq: Square) => {
     if (!userTurn || chimeraThinking || gameOver) return;
     if (promotionPick) return;
@@ -491,6 +514,7 @@ export default function ChimeraMatch() {
     }
 
     if (piece && piece.color === userColor) {
+      if (selected === sq && legalTargets.length > 0) return;
       setSelected(sq);
       setLegalTargets(getLegalMoves(state, sq));
       return;
@@ -696,6 +720,7 @@ export default function ChimeraMatch() {
             legalTargets={legalTargets}
             lastMove={lastMove}
             onSquareClick={onSquareClick}
+            onPiecePress={onPiecePress}
             disabled={!userTurn || chimeraThinking || !!gameOver}
             thinkingColor={chimeraThinking ? chimeraColor : null}
             showCorners={false}

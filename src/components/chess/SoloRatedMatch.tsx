@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import {
   analyzeUserMove,
   createPlayStyleProfile,
@@ -454,6 +454,29 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     ]
   );
 
+  const onPiecePress = useCallback(
+    (sq: Square) => {
+      if (!userTurn || phase !== "playing" || botThinking || promotionPick) return;
+      const piece = state.board[sq];
+      if (!piece || piece.color !== userColor) return;
+      if (selected === sq && legalTargets.length > 0) return;
+      startTransition(() => {
+        setSelected(sq);
+        setLegalTargets(getLegalMoves(state, sq));
+      });
+    },
+    [
+      userTurn,
+      phase,
+      botThinking,
+      promotionPick,
+      state,
+      userColor,
+      selected,
+      legalTargets.length,
+    ]
+  );
+
   const onSquareClick = (sq: Square) => {
     if (!userTurn || phase !== "playing" || botThinking || promotionPick) return;
 
@@ -471,6 +494,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     }
 
     if (piece && piece.color === userColor) {
+      if (selected === sq && legalTargets.length > 0) return;
       setSelected(sq);
       setLegalTargets(getLegalMoves(state, sq));
       return;
@@ -599,6 +623,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
               legalTargets={legalTargets}
               lastMove={lastMove}
               onSquareClick={onSquareClick}
+              onPiecePress={onPiecePress}
               disabled={!userTurn || phase !== "playing" || botThinking}
               showCorners={false}
             />

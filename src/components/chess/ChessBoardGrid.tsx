@@ -1,21 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCustomisation } from "../../customisation";
-import { isLightSquare } from "../../chess";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
-import ChessPiece from "./ChessPiece";
 import BoardAnnotations, { type BoardArrow } from "./BoardAnnotations";
+import BoardSquare from "./BoardSquare";
+import ChessPiece from "./ChessPiece";
 import { MOVE_SLIDE_MS } from "../../chess/movePacing";
 import MoveGlidePiece from "./MoveGlidePiece";
 import {
   clientToSquare,
-  DRAG_DROP_EASE,
-  DRAG_DROP_SNAP_MS,
   DRAG_LIFT_SCALE,
   DRAG_START_PX,
-  LAST_MOVE_FROM_OPACITY,
-  LAST_MOVE_TO_OPACITY,
-  lastMoveSquareTint,
-  squareCenterClient,
   squareToPercent,
   squareTranslateDelta,
 } from "./boardPointer";
@@ -27,6 +21,8 @@ export interface ChessBoardGridProps {
   legalTargets?: Move[];
   lastMove?: Move | null;
   onSquareClick?: (sq: Square) => void;
+  /** Called on pointer-down when the square has a piece (select before drag). */
+  onPiecePress?: (sq: Square) => void;
   disabled?: boolean;
   thinkingColor?: Color | null;
   engineHighlight?: { from: Square; to: Square } | null;
@@ -41,9 +37,6 @@ const BOARD_SHELL_CLASS =
 const BOARD_COMPACT_CLASS =
   "relative mx-auto w-full max-w-[min(100%,calc(100vw-1.25rem),20rem)]";
 
-const LEGAL_TINT = "rgba(120,200,140,0.14)";
-const LEGAL_CAPTURE_TINT = "rgba(255,200,100,0.12)";
-
 interface DragVisual {
   color: Color;
   type: PieceType;
@@ -57,6 +50,16 @@ interface SlideAnim {
   key: number;
 }
 
+function buildLegalLookup(legalTargets: Move[], board: GameState["board"]) {
+  const legal = new Set<number>();
+  const capture = new Set<number>();
+  for (const m of legalTargets) {
+    legal.add(m.to);
+    if (board[m.to] || m.flags?.includes("ep")) capture.add(m.to);
+  }
+  return { legal, capture };
+}
+
 export default function ChessBoardGrid({
   state,
   orientation = "w",
@@ -64,6 +67,7 @@ export default function ChessBoardGrid({
   legalTargets = [],
   lastMove = null,
   onSquareClick,
+  onPiecePress,
   disabled = false,
   thinkingColor = null,
   engineHighlight = null,
@@ -84,6 +88,9 @@ export default function ChessBoardGrid({
   const ghostRef = useRef<HTMLDivElement>(null);
   const ghostRaf = useRef(0);
   const pendingGhost = useRef<{ x: number; y: number } | null>(null);
+  const boardRectRef = useRef<DOMRect | null>(null);
+  const dragSourcePieceRef = useRef<HTMLElement | null>(null);
+  const windowDragCleanup = useRef<(() => void) | null>(null);
   const dragSession = useRef<{
     sq: Square;
     startX: number;
@@ -94,9 +101,13 @@ export default function ChessBoardGrid({
   } | null>(null);
 
   const [dragPiece, setDragPiece] = useState<DragVisual | null>(null);
-  const [dragFromSq, setDragFromSq] = useState<Square | null>(null);
   const [slide, setSlide] = useState<SlideAnim | null>(null);
   const prevMoveKey = useRef<string | null>(null);
+
+  const legalLookup = useMemo(
+    () => buildLegalLookup(legalTargets, state.board),
+    [legalTargets, state.board]
+  );
 
   useEffect(() => {
     if (!lastMove) return;
@@ -118,12 +129,15 @@ export default function ChessBoardGrid({
     return () => window.clearTimeout(t);
   }, [lastMove, state.board]);
 
-  const positionGhost = useCallback((clientX: number, clientY: number) => {
-    const board = boardRef.current;
-    const ghost = ghostRef.current;
-    if (!board || !ghost) return;
+  const refreshBoardRect = useCallback(() => {
+    boardRectRef.current = boardRef.current?.getBoundingClientRect() ?? null;
+  }, []);
 
-    const rect = board.getBoundingClientRect();
+  const positionGhost = useCallback((clientX: number, clientY: number) => {
+    const ghost = ghostRef.current;
+    const rect = boardRectRef.current;
+    if (!ghost || !rect) return;
+
     const size = rect.width / 8;
     const x = clientX - rect.left - size / 2;
     const y = clientY - rect.top - size / 2;
@@ -150,32 +164,64 @@ export default function ChessBoardGrid({
   useEffect(
     () => () => {
       if (ghostRaf.current) cancelAnimationFrame(ghostRaf.current);
+      windowDragCleanup.current?.();
     },
     []
   );
 
-  const showGhost = useCallback(
-    (visual: DragVisual, clientX: number, clientY: number) => {
-      setDragPiece(visual);
-      positionGhost(clientX, clientY);
-    },
-    [positionGhost]
-  );
+  const hideDragSourcePiece = useCallback((sq: Square) => {
+    const btn = boardRef.current?.querySelector<HTMLElement>(`[data-square="${sq}"]`);
+    const root = btn?.querySelector<HTMLElement>("[data-piece-root]");
+    if (root) {
+      dragSourcePieceRef.current = root;
+      root.style.visibility = "hidden";
+    }
+  }, []);
+
+  const showDragSourcePiece = useCallback(() => {
+    const root = dragSourcePieceRef.current;
+    if (root) {
+      root.style.visibility = "";
+      dragSourcePieceRef.current = null;
+    }
+  }, []);
 
   const hideGhost = useCallback(() => {
     setDragPiece(null);
     const ghost = ghostRef.current;
-    if (ghost) ghost.style.transform = "translate3d(0, 0, 0) scale(1)";
+    if (ghost) {
+      ghost.style.transition = "none";
+      ghost.style.transform = "translate3d(0, 0, 0) scale(1)";
+      ghost.classList.add("invisible");
+    }
+    showDragSourcePiece();
+  }, [showDragSourcePiece]);
+
+  const beginGhost = useCallback(
+    (visual: DragVisual, sq: Square, clientX: number, clientY: number) => {
+      refreshBoardRect();
+      hideDragSourcePiece(sq);
+      setDragPiece(visual);
+      const ghost = ghostRef.current;
+      if (ghost) ghost.classList.remove("invisible");
+      positionGhost(clientX, clientY);
+    },
+    [hideDragSourcePiece, positionGhost, refreshBoardRect]
+  );
+
+  const detachWindowDrag = useCallback(() => {
+    windowDragCleanup.current?.();
+    windowDragCleanup.current = null;
   }, []);
 
   const finishPointer = useCallback(
     (clientX: number, clientY: number, fallbackSq: Square) => {
+      detachWindowDrag();
       const session = dragSession.current;
       dragSession.current = null;
 
       if (!session || !onSquareClick) {
         hideGhost();
-        setDragFromSq(null);
         return;
       }
 
@@ -185,68 +231,77 @@ export default function ChessBoardGrid({
           ? clientToSquare(el.getBoundingClientRect(), clientX, clientY, flip)
           : null;
 
-      const commit = () => {
-        hideGhost();
-        setDragFromSq(null);
-        if (session.dragging && dropSq !== null) {
-          onSquareClick(dropSq);
-        } else if (!session.dragging) {
-          onSquareClick(fallbackSq);
-        }
+      hideGhost();
+
+      if (session.dragging && dropSq !== null) {
+        onSquareClick(dropSq);
+      } else if (!session.dragging) {
+        onSquareClick(fallbackSq);
+      }
+    },
+    [detachWindowDrag, flip, hideGhost, onSquareClick]
+  );
+
+  const attachWindowDrag = useCallback(
+    (pointerId: number) => {
+      detachWindowDrag();
+
+      const onMove = (e: PointerEvent) => {
+        if (e.pointerId !== pointerId) return;
+        const session = dragSession.current;
+        if (!session?.dragging) return;
+        e.preventDefault();
+        scheduleGhostPosition(e.clientX, e.clientY);
       };
 
-      if (session.dragging && dropSq !== null && el) {
-        const rect = el.getBoundingClientRect();
-        const center = squareCenterClient(rect, dropSq, flip);
-        positionGhost(center.x, center.y);
-        const ghost = ghostRef.current;
-        if (ghost) {
-          ghost.style.transition = `transform ${DRAG_DROP_SNAP_MS}ms ${DRAG_DROP_EASE}`;
-          window.setTimeout(commit, DRAG_DROP_SNAP_MS + 8);
-          return;
+      const onUp = (e: PointerEvent) => {
+        if (e.pointerId !== pointerId) return;
+        const session = dragSession.current;
+        if (!session?.armed) return;
+        try {
+          boardRef.current?.releasePointerCapture(pointerId);
+        } catch {
+          /* already released */
         }
-      }
+        finishPointer(e.clientX, e.clientY, session.sq);
+      };
 
-      commit();
+      window.addEventListener("pointermove", onMove, { passive: false });
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+
+      windowDragCleanup.current = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
     },
-    [flip, hideGhost, onSquareClick, positionGhost]
+    [detachWindowDrag, finishPointer, scheduleGhostPosition]
   );
 
   const onBoardPointerMove = useCallback(
     (e: React.PointerEvent) => {
       const session = dragSession.current;
-      if (!session?.armed) return;
+      if (!session?.armed || session.dragging) return;
 
       const dx = e.clientX - session.startX;
       const dy = e.clientY - session.startY;
-      const dist = Math.hypot(dx, dy);
+      if (Math.hypot(dx, dy) < DRAG_START_PX) return;
 
-      if (!session.dragging && dist >= DRAG_START_PX) {
-        session.dragging = true;
-        setDragFromSq(session.sq);
-        if (selected !== session.sq) {
-          onSquareClick?.(session.sq);
-        }
-
-        const piece = session.piece ?? state.board[session.sq];
-        if (piece) {
-          showGhost(piece, e.clientX, e.clientY);
-        }
-        return;
-      }
-
-      if (session.dragging) {
-        e.preventDefault();
-        scheduleGhostPosition(e.clientX, e.clientY);
+      session.dragging = true;
+      const piece = session.piece;
+      if (piece) {
+        beginGhost(piece, session.sq, e.clientX, e.clientY);
+        attachWindowDrag(e.pointerId);
       }
     },
-    [onSquareClick, scheduleGhostPosition, selected, showGhost, state.board]
+    [attachWindowDrag, beginGhost]
   );
 
   const onBoardPointerUp = useCallback(
     (e: React.PointerEvent) => {
       const session = dragSession.current;
-      if (!session?.armed) return;
+      if (!session?.armed || session.dragging) return;
       try {
         boardRef.current?.releasePointerCapture(e.pointerId);
       } catch {
@@ -269,13 +324,17 @@ export default function ChessBoardGrid({
         armed: true,
         piece: piece ? { color: piece.color, type: piece.type } : null,
       };
+      refreshBoardRect();
+      if (piece && onPiecePress) {
+        onPiecePress(sq);
+      }
       try {
         boardRef.current?.setPointerCapture(e.pointerId);
       } catch {
         /* ignore */
       }
     },
-    [interactive, state.board]
+    [interactive, onPiecePress, refreshBoardRect, state.board]
   );
 
   const slideGlide = slide
@@ -315,145 +374,40 @@ export default function ChessBoardGrid({
             const vf = visualIndex % 8;
             const sq = displayRank(vr) * 8 + displayFile(vf);
             const piece = state.board[sq];
-            const isLight = isLightSquare(sq);
             const isSelected = selected === sq;
             const isLastFrom = lastMove !== null && lastMove.from === sq;
             const isLastTo = lastMove !== null && lastMove.to === sq;
-            const isLegal = legalTargets.some((m) => m.to === sq);
-            const isCapture =
-              isLegal &&
-              (state.board[sq] ||
-                legalTargets.find((m) => m.to === sq)?.flags?.includes("ep"));
+            const isLegal = legalLookup.legal.has(sq);
+            const isCapture = legalLookup.capture.has(sq);
             const isThinking =
-              thinkingColor &&
+              !!thinkingColor &&
               piece?.color === thinkingColor &&
               state.turn === thinkingColor;
-            const isEngineFrom = engineHighlight?.from === sq;
-            const isEngineTo = engineHighlight?.to === sq;
-            const heat = squareHeats?.get(sq);
-            const isDragSource = dragFromSq === sq;
             const hideForSlide =
               slide !== null && (slide.from === sq || slide.to === sq);
 
-            const bg = isLight ? boardTheme.lightSquare : boardTheme.darkSquare;
-            const lastFromTint = lastMoveSquareTint(
-              boardTheme.lastMove,
-              LAST_MOVE_FROM_OPACITY
-            );
-            const lastToTint = lastMoveSquareTint(
-              boardTheme.lastMove,
-              LAST_MOVE_TO_OPACITY
-            );
-
             return (
-              <button
+              <BoardSquare
                 key={sq}
-                type="button"
-                disabled={!interactive}
+                sq={sq}
+                piece={piece}
+                boardTheme={boardTheme}
+                pieceSet={pieceSet}
+                interactive={interactive}
+                isSelected={isSelected}
+                isLegal={isLegal}
+                isCapture={isCapture}
+                isLastFrom={isLastFrom}
+                isLastTo={isLastTo}
+                isThinking={!!isThinking}
+                isEngineFrom={engineHighlight?.from === sq}
+                isEngineTo={engineHighlight?.to === sq}
+                heat={squareHeats?.get(sq)}
+                hidePiece={hideForSlide}
                 onPointerDown={
                   interactive ? (e) => onSquarePointerDown(sq, e) : undefined
                 }
-                style={{ backgroundColor: bg }}
-                className={[
-                  "relative flex size-full min-h-0 min-w-0 items-center justify-center overflow-hidden p-0",
-                  "select-none transition-[background-color] duration-200 ease-out",
-                  interactive ? "cursor-grab active:cursor-grabbing" : "cursor-default",
-                  isThinking && "ring-1 ring-inset ring-[rgba(0,229,255,0.25)]",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                aria-label={piece ? `${piece.color} ${piece.type}` : "empty"}
-              >
-                {isLastFrom && (
-                  <span
-                    className="pointer-events-none absolute inset-0"
-                    style={{ backgroundColor: lastFromTint }}
-                    aria-hidden
-                  />
-                )}
-                {isLastTo && (
-                  <span
-                    className="pointer-events-none absolute inset-0"
-                    style={{ backgroundColor: lastToTint }}
-                    aria-hidden
-                  />
-                )}
-                {isLegal && !piece && (
-                  <span
-                    className="pointer-events-none absolute inset-0"
-                    style={{ backgroundColor: LEGAL_TINT }}
-                    aria-hidden
-                  />
-                )}
-                {isLegal && isCapture && (
-                  <span
-                    className="pointer-events-none absolute inset-0"
-                    style={{ backgroundColor: LEGAL_CAPTURE_TINT }}
-                    aria-hidden
-                  />
-                )}
-                {isEngineFrom && (
-                  <span
-                    className="pointer-events-none absolute inset-0 bg-[rgba(255,200,60,0.12)]"
-                    aria-hidden
-                  />
-                )}
-                {isEngineTo && (
-                  <span
-                    className="pointer-events-none absolute inset-0 bg-[rgba(0,229,255,0.14)]"
-                    aria-hidden
-                  />
-                )}
-                {heat && (
-                  <span
-                    className="pointer-events-none absolute inset-0"
-                    style={{
-                      backgroundColor: heat.fill,
-                      boxShadow: `inset 0 0 0 2px ${heat.ring}`,
-                    }}
-                    aria-hidden
-                  />
-                )}
-                {isSelected && (
-                  <span
-                    className="pointer-events-none absolute inset-0"
-                    style={{ boxShadow: `inset 0 0 0 2px ${boardTheme.selectedRing}` }}
-                    aria-hidden
-                  />
-                )}
-                {isLegal && !piece && (
-                  <span
-                    className="relative z-[1] h-[18%] w-[18%] min-h-1.5 min-w-1.5 max-h-2.5 max-w-2.5 rounded-full"
-                    style={{
-                      backgroundColor: boardTheme.legalDot,
-                      boxShadow: `0 0 6px ${boardTheme.legalDot}`,
-                    }}
-                  />
-                )}
-                {isLegal && isCapture && (
-                  <span
-                    className="pointer-events-none absolute inset-[14%] z-[1] rounded-full border border-opacity-75 box-border"
-                    style={{ borderColor: boardTheme.legalCapture }}
-                  />
-                )}
-                {piece && !hideForSlide && (
-                  <div
-                    className={[
-                      "relative z-[2] flex h-[88%] w-[88%] items-center justify-center",
-                      isSelected ? "scale-[1.04]" : "",
-                      isDragSource ? "invisible" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    <ChessPiece
-                      color={piece.color}
-                      type={piece.type}
-                      pieceSet={pieceSet}
-                    />
-                  </div>
-                )}
-              </button>
+              />
             );
           })}
         </div>
@@ -483,9 +437,8 @@ export default function ChessBoardGrid({
           ref={ghostRef}
           aria-hidden
           className={[
-            "pointer-events-none absolute left-0 top-0 z-40 flex h-0 w-0 items-center justify-center",
-            "will-change-transform opacity-95",
-            dragPiece ? "visible" : "invisible",
+            "pointer-events-none absolute left-0 top-0 z-40 flex items-center justify-center",
+            "invisible will-change-transform opacity-95",
           ].join(" ")}
         >
           {dragPiece && (

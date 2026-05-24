@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCustomisation } from "../../customisation";
 import { useGameClock } from "../../online/useGameClock";
 import type { OnlineClientState } from "../../online/useOnlineClient";
@@ -207,6 +207,28 @@ export default function OnlineMatch({
     [state, onSendMove]
   );
 
+  const onPiecePress = useCallback(
+    (sq: Square) => {
+      if (!userTurn || client.phase !== "playing" || promotionPick) return;
+      const piece = state.board[sq];
+      if (!piece || piece.color !== userColor) return;
+      if (selected === sq && legalTargets.length > 0) return;
+      startTransition(() => {
+        setSelected(sq);
+        setLegalTargets(getLegalMoves(state, sq));
+      });
+    },
+    [
+      userTurn,
+      client.phase,
+      promotionPick,
+      state,
+      userColor,
+      selected,
+      legalTargets.length,
+    ]
+  );
+
   const onSquareClick = (sq: Square) => {
     if (!userTurn || client.phase !== "playing") return;
     if (promotionPick) return;
@@ -225,6 +247,7 @@ export default function OnlineMatch({
     }
 
     if (piece && piece.color === userColor) {
+      if (selected === sq && legalTargets.length > 0) return;
       setSelected(sq);
       setLegalTargets(getLegalMoves(state, sq));
       return;
@@ -315,6 +338,7 @@ export default function OnlineMatch({
             legalTargets={legalTargets}
             lastMove={lastMove}
             onSquareClick={onSquareClick}
+            onPiecePress={onPiecePress}
             disabled={!userTurn || client.phase !== "playing"}
             showCorners={false}
           />
