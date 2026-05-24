@@ -1,4 +1,8 @@
-/** CAPS-style move accuracy from centipawn loss (chess.com / lichess family). */
+/**
+ * CAPS-style move accuracy from centipawn loss (Chess.com / Lichess family).
+ * Exponential decay: small CPL barely hurts, large CPL crushes the score.
+ * @see GRADING.md
+ */
 export function cpLossToAccuracy(cpLoss: number): number {
   const loss = Math.max(0, cpLoss);
   const raw = 103.1668 * Math.exp(-0.04354 * loss) - 3.1669;

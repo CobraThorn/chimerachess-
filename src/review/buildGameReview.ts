@@ -128,6 +128,7 @@ export async function buildGameReview(
     const grade = classifyMoveGrade({
       cpLoss,
       playedBest,
+      brilliantCandidate: graded?.brilliantCandidate ?? false,
       ply,
       userEvalBeforeCp: userEvalBefore,
     });

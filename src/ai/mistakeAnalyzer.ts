@@ -1,4 +1,6 @@
 import { fromFen, makeMove, toFen, uciToMove } from "../chess";
+import type { Color, GameState } from "../chess/types";
+import { countMaterial } from "../chess/board";
 import { evalFromResult } from "../engine/analysis";
 import {
   categoryFromCpLoss,
@@ -8,9 +10,13 @@ import type { StockfishEngine } from "../engine/stockfish";
 import { getEvaluation, searchPosition } from "../engine/stockfish";
 import type { MistakeCategory, MistakeRecord } from "./types";
 
+/** Engine-best or within this many cp of the best line (Chess.com-style). */
+const NEAR_BEST_CP = 10;
+
 export interface UserMoveEngineGrade {
   cpLoss: number;
   playedBest: boolean;
+  brilliantCandidate: boolean;
   bestUci: string;
   secondBestUci?: string;
   category: MistakeCategory | null;
@@ -19,8 +25,54 @@ export interface UserMoveEngineGrade {
   userEvalBeforeCp: number;
 }
 
+function detectBrilliant(input: {
+  stateBefore: GameState;
+  playedUci: string;
+  userColor: Color;
+  userBefore: number;
+  userAfterPlayed: number;
+  cpLoss: number;
+  playedBest: boolean;
+  top?: { move: string; cp: number };
+  second?: { move: string; cp: number };
+}): boolean {
+  const {
+    stateBefore,
+    playedUci,
+    userColor,
+    userBefore,
+    userAfterPlayed,
+    cpLoss,
+    playedBest,
+    top,
+    second,
+  } = input;
+
+  if (!playedBest || cpLoss > NEAR_BEST_CP) return false;
+
+  if (top && second) {
+    const userTop = userCpFromWhite(top.cp, userColor);
+    const userSecond = userCpFromWhite(second.cp, userColor);
+    if (userTop - userSecond >= 200) return true;
+  }
+
+  const played = uciToMove(stateBefore, playedUci);
+  if (!played) return false;
+  const afterState = makeMove(stateBefore, played);
+  if (!afterState) return false;
+
+  const matBefore = countMaterial(stateBefore);
+  const matAfter = countMaterial(afterState);
+  const userMatBefore = userColor === "w" ? matBefore.w : matBefore.b;
+  const userMatAfter = userColor === "w" ? matAfter.w : matAfter.b;
+  const materialLost = userMatBefore - userMatAfter;
+  if (materialLost >= 1 && userAfterPlayed >= userBefore - 40) return true;
+
+  return false;
+}
+
 /**
- * Centipawn loss from the user's perspective — one root search, then at most one leaf eval.
+ * Centipawn loss from the user's perspective: eval after best line minus eval after played line.
  */
 export async function computeUserMoveCpLoss(
   engine: StockfishEngine,
@@ -43,25 +95,15 @@ export async function computeUserMoveCpLoss(
 
   const top = root.topMoves[0];
   const second = root.topMoves[1];
-  const playedBest = top?.move === playedUci;
   const bestUci = top?.move ?? playedUci;
 
-  if (playedBest) {
-    return {
-      cpLoss: 0,
-      playedBest: true,
-      bestUci,
-      secondBestUci: second?.move,
-      category: null,
-      evalBeforeCpWhite: before.cpWhite,
-      evalAfterCpWhite: before.cpWhite,
-      userEvalBeforeCp: userBefore,
-    };
-  }
+  engine.stop();
+  const afterPlayedEval = await getEvaluation(engine, fenAfter, depth);
+  const afterPlayed = evalFromResult(fenAfter, afterPlayedEval);
+  const evalAfterCpWhite = afterPlayed.cpWhite;
+  const userAfterPlayed = userCpFromWhite(evalAfterCpWhite, userColor);
 
-  let cpLoss = 0;
-  let evalAfterCpWhite = before.cpWhite;
-
+  let userAfterBest = userBefore;
   const bestMove = uciToMove(stateBefore, bestUci);
   if (bestMove) {
     const afterBestState = makeMove(stateBefore, bestMove);
@@ -70,23 +112,34 @@ export async function computeUserMoveCpLoss(
       engine.stop();
       const afterBest = await getEvaluation(engine, fenAfterBest, depth);
       const { cpWhite } = evalFromResult(fenAfterBest, afterBest);
-      evalAfterCpWhite = cpWhite;
-      const userAfterBest = userCpFromWhite(cpWhite, userColor);
-      cpLoss = Math.round(Math.max(0, userBefore - userAfterBest));
+      userAfterBest = userCpFromWhite(cpWhite, userColor);
     }
   }
 
-  if (before.isMate) {
-    engine.stop();
-    const afterPlayed = await getEvaluation(engine, fenAfter, depth);
-    const after = evalFromResult(fenAfter, afterPlayed);
-    evalAfterCpWhite = after.cpWhite;
-    if (!after.isMate) cpLoss = Math.max(cpLoss, 900);
+  let cpLoss = Math.round(Math.max(0, userAfterBest - userAfterPlayed));
+
+  if (before.isMate && !afterPlayed.isMate) {
+    cpLoss = Math.max(cpLoss, 900);
   }
+
+  const exactBest = top?.move === playedUci;
+  const playedBest = exactBest || cpLoss <= NEAR_BEST_CP;
+  const brilliantCandidate = detectBrilliant({
+    stateBefore,
+    playedUci,
+    userColor,
+    userBefore,
+    userAfterPlayed,
+    cpLoss,
+    playedBest,
+    top,
+    second,
+  });
 
   return {
     cpLoss,
-    playedBest: false,
+    playedBest,
+    brilliantCandidate,
     bestUci,
     secondBestUci: second?.move,
     category: categoryFromCpLoss(cpLoss),
