@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
 import type { Color } from "../../chess";
 import type { LegendGame } from "../../content/legends";
 import ChessBoardGrid from "../chess/ChessBoardGrid";
+import PlyScrubber from "../ui/PlyScrubber";
 import {
   buildLegendReplaySteps,
   stateAtLegendPly,
@@ -47,10 +48,14 @@ export default function LegendGameReplayer({
   );
   const maxPly = steps.length > 0 ? steps.length - 1 : 0;
   const [ply, setPly] = useState(0);
+  const [previewPly, setPreviewPly] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+
+  const activePly = previewPly ?? ply;
 
   const go = useCallback(
     (next: number) => {
+      setPreviewPly(null);
       setPly(Math.max(0, Math.min(next, maxPly)));
     },
     [maxPly]
@@ -66,10 +71,10 @@ export default function LegendGameReplayer({
     return () => window.clearTimeout(t);
   }, [playing, ply, maxPly, go]);
 
-  const { state, lastMove } = stateAtLegendPly(game.moves, ply);
-  const step = steps[ply] ?? steps[0];
+  const { state, lastMove } = stateAtLegendPly(game.moves, activePly);
+  const step = steps[activePly] ?? steps[0];
   const orientation: Color = game.legendColor;
-  const isHighlight = highlightPly != null && ply === highlightPly;
+  const isHighlight = highlightPly != null && activePly === highlightPly;
 
   return (
     <div className="space-y-4">
@@ -119,22 +124,24 @@ export default function LegendGameReplayer({
         <NavBtn onClick={() => go(0)} label="⏮" title="Start" />
         <NavBtn onClick={() => go(ply - 1)} label="◀" disabled={ply <= 0} />
         <span className="min-w-[4rem] text-center font-[family-name:var(--font-hud)] text-[10px] tracking-[0.15em] text-[rgba(255,255,255,0.5)]">
-          {ply}/{maxPly}
+          {activePly}/{maxPly}
         </span>
         <NavBtn onClick={() => go(ply + 1)} label="▶" disabled={ply >= maxPly} />
         <NavBtn onClick={() => go(maxPly)} label="⏭" title="End" />
       </div>
 
-      <input
-        type="range"
+      <PlyScrubber
         min={0}
         max={maxPly}
         value={ply}
-        onChange={(e) => {
-          setPlaying(false);
-          go(Number(e.target.value));
+        fillClassName="bg-[rgba(232,197,71,0.55)]"
+        thumbClassName="border-[rgba(232,197,71,0.35)] bg-[rgba(232,197,71,0.9)] shadow-[0_0_12px_rgba(232,197,71,0.25)]"
+        onScrubStart={() => setPlaying(false)}
+        onPreview={(v) => startTransition(() => setPreviewPly(v))}
+        onChange={(v) => {
+          setPreviewPly(null);
+          setPly(v);
         }}
-        className="w-full accent-[rgba(232,197,71,0.65)]"
         aria-label="Scrub legendary game"
       />
 

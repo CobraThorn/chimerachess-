@@ -1,6 +1,12 @@
 import { motion } from "framer-motion";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { loadMemory } from "../../ai/memory";
+import type { ChimeraMemory, StoredGame } from "../../ai/types";
+import { CHIMERA_MEMORY_EVENT } from "../../ai/types";
+import { usePostGameIntelligence } from "../../hooks/usePostGameIntelligence";
 import { useReviewCoach } from "../../hooks/useReviewCoach";
+import type { MistakeIntelligence } from "../../mistakeIntel/types";
+import PostGameIntelligencePanel from "../intelligence/PostGameIntelligencePanel";
 import { formatEvalLabel } from "../../engine/analysis";
 import { cpToPawns, missSizeWord } from "../../review/metricsDisplay";
 import { MOVE_GRADE_META } from "../../review/moveGrades";
@@ -15,6 +21,9 @@ interface GameReviewPanelProps {
   error?: string | null;
   onClose: () => void;
   onNewGame?: () => void;
+  /** Stored game + memory enable the performance-lab intelligence layer */
+  storedGame?: StoredGame | null;
+  memory?: ChimeraMemory | null;
 }
 
 export default function GameReviewPanel({
@@ -24,8 +33,38 @@ export default function GameReviewPanel({
   error = null,
   onClose,
   onNewGame,
+  storedGame = null,
+  memory = null,
 }: GameReviewPanelProps) {
-  const coach = useReviewCoach(report);
+  const [localMemory, setLocalMemory] = useState<ChimeraMemory>(() => loadMemory());
+  useEffect(() => {
+    const sync = () => setLocalMemory(loadMemory());
+    window.addEventListener(CHIMERA_MEMORY_EVENT, sync);
+    return () => window.removeEventListener(CHIMERA_MEMORY_EVENT, sync);
+  }, []);
+  const activeMemory = memory ?? localMemory;
+  const resolvedGame = useMemo((): StoredGame | null => {
+    if (storedGame) return storedGame;
+    if (!report) return null;
+    return activeMemory.games.find((g) => g.id === report.id) ?? null;
+  }, [storedGame, report, activeMemory.games]);
+  const { report: intelligenceReport, running: intelligenceRunning } =
+    usePostGameIntelligence(
+      resolvedGame,
+      activeMemory,
+      report,
+      report?.mode ?? "chimera"
+    );
+
+  const mistakesByPly = useMemo(() => {
+    const map = new Map<number, MistakeIntelligence>();
+    intelligenceReport?.mistakeIntelligence?.mistakes.forEach((m) => {
+      map.set(m.ply, m);
+    });
+    return map;
+  }, [intelligenceReport?.mistakeIntelligence]);
+
+  const coach = useReviewCoach(report, mistakesByPly);
 
   if (!loading && !report && !error) return null;
 
@@ -123,6 +162,12 @@ export default function GameReviewPanel({
                 onEnsureNote={coach.ensureNote}
               />
             </div>
+
+            <PostGameIntelligencePanel
+              report={intelligenceReport}
+              reviewReport={report}
+              loading={intelligenceRunning}
+            />
 
             <section className="mt-8">
               <SectionTitle>Coach summary</SectionTitle>

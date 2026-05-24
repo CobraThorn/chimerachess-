@@ -48,7 +48,25 @@ export function squareTranslateDelta(
   };
 }
 
-export const DRAG_START_PX = 4;
+/** Movement before drag mode (tap stays click-to-move). */
+export const DRAG_START_PX = 6;
+
+/** Client coords of square center for drop snap animation. */
+export function squareCenterClient(
+  rect: DOMRect,
+  sq: Square,
+  flip: boolean
+): { x: number; y: number } {
+  const f = sq & 7;
+  const r = sq >> 3;
+  const vf = flip ? 7 - f : f;
+  const vr = flip ? r : 7 - r;
+  const size = rect.width / 8;
+  return {
+    x: rect.left + (vf + 0.5) * size,
+    y: rect.top + (vr + 0.5) * size,
+  };
+}
 
 /** Last-move square tint (where the piece was / landed). */
 export const LAST_MOVE_FROM_OPACITY = 0.34;

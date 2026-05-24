@@ -46,6 +46,8 @@ export interface StoredGame {
   mistakes: MistakeRecord[];
   result: "user-win" | "chimera-win" | "draw";
   openingLine: string;
+  /** Milliseconds spent on each user move, in order */
+  userMoveTimesMs?: number[];
 }
 
 export interface ChimeraMemory {
@@ -93,6 +95,8 @@ export interface ChimeraMemory {
   crs?: ChimeraRatingState;
   /** Custom adaptive learning model — habits, counters, lessons */
   learning?: AdaptiveLearningState;
+  /** Post-game intelligence archive (phenotype lab + reports) */
+  intelligence?: import("../intelligence/types").IntelligenceArchive;
 }
 
 export const INITIAL_USER_ELO = 100;

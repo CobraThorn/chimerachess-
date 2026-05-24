@@ -11,7 +11,7 @@ import {
   updateStyleFromMove,
 } from "../../ai";
 import { waitForPendingMistakeAnalyses } from "../../ai/mistakeAnalyzer";
-import { INITIAL_CHIMERA_ELO } from "../../ai/types";
+import { CHIMERA_MEMORY_EVENT, INITIAL_CHIMERA_ELO } from "../../ai/types";
 import type { GameMoveRecord, MistakeRecord, StoredGame } from "../../ai/types";
 import {
   createInitialState,
@@ -135,13 +135,20 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     startedAt: number;
     moves: GameMoveRecord[];
     mistakes: MistakeRecord[];
+    userMoveTimesMs: number[];
   } | null>(null);
   const endedRef = useRef(false);
   const reviewStartedRef = useRef(false);
   const pendingMistakeAnalysesRef = useRef(0);
 
   const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
-  const memory = loadMemory();
+  const [memory, setMemory] = useState(() => loadMemory());
+
+  useEffect(() => {
+    const sync = () => setMemory(loadMemory());
+    window.addEventListener(CHIMERA_MEMORY_EVENT, sync);
+    return () => window.removeEventListener(CHIMERA_MEMORY_EVENT, sync);
+  }, []);
   const crs = ensureCrsState(memory);
   const chimeraElo = memory.chimeraElo ?? INITIAL_CHIMERA_ELO;
 
@@ -184,6 +191,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
       startedAt: Date.now(),
       moves: [],
       mistakes: [],
+      userMoveTimesMs: [],
     };
     endedRef.current = false;
     reviewStartedRef.current = false;
@@ -321,6 +329,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
           .slice(0, 6)
           .map((m) => m.san ?? m.uci)
           .join(" "),
+        userMoveTimesMs: [...g.userMoveTimesMs],
       };
 
       const mem = loadMemory();
@@ -366,6 +375,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
       if (phase !== "playing" || !userTurn || botThinking) return;
 
       const fenBefore = toFen(state);
+      const thinkMs = Date.now() - turnStartedAt;
       const { clock: afterFlag, flagged } = applyMoveClock(
         clock,
         userColor,
@@ -381,6 +391,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
       if (!next) return;
 
       recordMove(move, "user", state);
+      gameRef.current?.userMoveTimesMs.push(Math.max(0, thinkMs));
       setClock(afterFlag);
       setTurnStartedAt(Date.now());
       setState(next);
@@ -510,6 +521,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         progress={progress}
         error={reviewError}
         onClose={dismiss}
+        memory={memory}
       />
       <motion.div
         initial={{ opacity: 0, y: 12 }}

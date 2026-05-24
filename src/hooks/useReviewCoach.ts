@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasOpenAiApiKey } from "../api/openaiKey";
+import type { MistakeIntelligence } from "../mistakeIntel/types";
 import {
   buildCoachSummary,
   loadReviewCoachNote,
@@ -7,7 +8,10 @@ import {
 } from "../review/reviewCoach";
 import type { GameReviewReport, ReviewCoachNote } from "../review/types";
 
-export function useReviewCoach(report: GameReviewReport | null) {
+export function useReviewCoach(
+  report: GameReviewReport | null,
+  mistakesByPly?: Map<number, MistakeIntelligence>
+) {
   const [notes, setNotes] = useState<Map<number, ReviewCoachNote>>(new Map());
   const [coachSummary, setCoachSummary] = useState<string | null>(null);
   const [prefetchDone, setPrefetchDone] = useState(0);
@@ -16,6 +20,11 @@ export function useReviewCoach(report: GameReviewReport | null) {
   const runId = useRef(0);
   const notesRef = useRef(notes);
   notesRef.current = notes;
+
+  const mistakeKey = useMemo(() => {
+    if (!mistakesByPly?.size) return "";
+    return [...mistakesByPly.keys()].sort((a, b) => a - b).join(",");
+  }, [mistakesByPly]);
 
   useEffect(() => {
     if (!report) {
@@ -34,28 +43,56 @@ export function useReviewCoach(report: GameReviewReport | null) {
       if (runId.current === id) setCoachSummary(summary);
     });
 
-    void prefetchReviewCoachNotes(report, (done, total) => {
-      if (runId.current === id) {
-        setPrefetchDone(done);
-        setPrefetchTotal(total);
-      }
-    }).then((map) => {
+    void prefetchReviewCoachNotes(
+      report,
+      (done, total) => {
+        if (runId.current === id) {
+          setPrefetchDone(done);
+          setPrefetchTotal(total);
+        }
+      },
+      mistakesByPly
+    ).then((map) => {
       if (runId.current === id) setNotes(new Map(map));
     });
-  }, [report?.id]);
+  }, [report?.id, mistakeKey]);
+
+  useEffect(() => {
+    if (!report || !mistakesByPly?.size || !hasOpenAiApiKey()) return;
+
+    let cancelled = false;
+    void (async () => {
+      for (const [ply, mi] of mistakesByPly) {
+        if (cancelled) break;
+        const note = await loadReviewCoachNote(report, ply, {
+          mistakeIntel: mi,
+          forceRefresh: true,
+        });
+        if (!cancelled) {
+          setNotes((prev) => new Map(prev).set(ply, note));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [report, mistakesByPly, mistakeKey]);
 
   const ensureNote = useCallback(
     async (ply: number) => {
       if (!report || notesRef.current.has(ply)) return;
       setLoadingPly(ply);
       try {
-        const note = await loadReviewCoachNote(report, ply);
+        const note = await loadReviewCoachNote(report, ply, {
+          mistakeIntel: mistakesByPly?.get(ply),
+        });
         setNotes((prev) => new Map(prev).set(ply, note));
       } finally {
         setLoadingPly(null);
       }
     },
-    [report]
+    [report, mistakesByPly]
   );
 
   return {

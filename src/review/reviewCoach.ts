@@ -1,6 +1,8 @@
 import { formatPawnAmount } from "./metricsDisplay";
 import { formatEvalLabel } from "../engine/analysis";
+import { chatCompletionJson, chatCompletionText } from "../api/gptChat";
 import { getOpenAiApiKey, hasOpenAiApiKey } from "../api/openaiKey";
+import type { MistakeIntelligence } from "../mistakeIntel/types";
 import type {
   GameReviewReport,
   ReviewCoachNote,
@@ -125,7 +127,8 @@ function buildLocalNote(
 async function fetchGptNote(
   report: GameReviewReport,
   step: ReviewRecapStep,
-  apiKey: string
+  apiKey: string,
+  mistakeIntel?: MistakeIntelligence
 ): Promise<ReviewCoachNote | null> {
   if (step.ply === 0) return null;
 
@@ -136,6 +139,7 @@ async function fetchGptNote(
 
   const system = `You are CHIMERA Chess — an elite coach beyond chess.com reviews.
 Teach like a titled player + sports psychologist: concrete, visual, no fluff.
+When a DECISION AUTOPSY is provided, weave its insights into your recap — do not contradict engine facts.
 Respond ONLY with JSON:
 {
   "title": "short headline",
@@ -143,6 +147,10 @@ Respond ONLY with JSON:
   "teachingPoint": "one memorable rule or habit for the student"
 }
 Mention eval swings when relevant. Be specific to the FEN and move.`;
+
+  const autopsy = mistakeIntel
+    ? `\nDECISION AUTOPSY (ground truth):\n${mistakeIntel.explanation.whyWrong}\nBest: ${mistakeIntel.bestMove}. Cognitive: ${mistakeIntel.explanation.cognitiveFailure.join("; ")}`
+    : "";
 
   const user = `Game: ${report.mode} vs ${report.opponentLabel}
 Result: ${report.resultLabel}
@@ -153,38 +161,14 @@ Move played: ${step.san ?? step.uci} (${step.uci}) by ${step.mover === "user" ? 
 FEN after: ${step.fen}
 Eval before → after (White POV): ${evalBefore} → ${evalAfter}
 ${ua ? `Engine grade: ${ua.grade}, cp loss ${ua.cpLoss}, best ${ua.bestUci}, insight: ${ua.insight}` : "Opponent move — explain why it matters to the student."}
-Opening so far: ${report.openingLine.slice(0, 120)}`;
+Opening so far: ${report.openingLine.slice(0, 120)}${autopsy}`;
 
-  const baseUrl = import.meta.env.DEV
-    ? "/api/openai/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
-
-  const res = await fetch(baseUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.45,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
+  const json = await chatCompletionJson<GptReviewJson>(system, user, {
+    temperature: 0.45,
+    apiKey,
   });
+  if (!json) return null;
 
-  if (!res.ok) return null;
-
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) return null;
-
-  const json = JSON.parse(content) as GptReviewJson;
   return {
     ply: step.ply,
     title: json.title ?? `${step.san ?? step.uci}`,
@@ -196,21 +180,31 @@ Opening so far: ${report.openingLine.slice(0, 120)}`;
 
 export async function loadReviewCoachNote(
   report: GameReviewReport,
-  ply: number
+  ply: number,
+  options?: { mistakeIntel?: MistakeIntelligence; forceRefresh?: boolean }
 ): Promise<ReviewCoachNote> {
   const step = report.recapSteps[ply];
   if (!step) {
     return buildLocalNote(report, report.recapSteps[0]!);
   }
 
-  const key = cacheKey(report.id, ply);
-  const cached = readCache(key);
-  if (cached) return cached;
+  const key = options?.mistakeIntel
+    ? `${cacheKey(report.id, ply)}:autopsy`
+    : cacheKey(report.id, ply);
+  if (!options?.forceRefresh) {
+    const cached = readCache(key);
+    if (cached) return cached;
+  }
 
   const apiKey = getOpenAiApiKey();
   if (apiKey) {
     try {
-      const gpt = await fetchGptNote(report, step, apiKey);
+      const gpt = await fetchGptNote(
+        report,
+        step,
+        apiKey,
+        options?.mistakeIntel
+      );
       if (gpt?.explanation) {
         writeCache(key, gpt);
         return gpt;
@@ -246,34 +240,9 @@ Blunders: ${report.blunders}, mistakes: ${report.mistakes}
 Critical: ${report.criticalMoments.map((c) => `${c.san ?? c.uci} (${formatPawnAmount(c.cpLoss)} lost)`).join("; ") || "none"}
 Narrative: ${report.narrative.join(" ")}`;
 
-  const baseUrl = import.meta.env.DEV
-    ? "/api/openai/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
-
   try {
-    const res = await fetch(baseUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.5,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
-    });
-    if (!res.ok) throw new Error("summary failed");
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    return (
-      data.choices?.[0]?.message?.content?.trim() ??
-      report.narrative.join(" ")
-    );
+    const text = await chatCompletionText(system, user, { temperature: 0.5 });
+    return text ?? report.narrative.join(" ");
   } catch {
     return report.narrative.join(" ");
   }
@@ -282,7 +251,8 @@ Narrative: ${report.narrative.join(" ")}`;
 /** Prefetch coach notes for all plies (concurrency-limited). */
 export async function prefetchReviewCoachNotes(
   report: GameReviewReport,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  mistakesByPly?: Map<number, MistakeIntelligence>
 ): Promise<Map<number, ReviewCoachNote>> {
   const map = new Map<number, ReviewCoachNote>();
   const plies = report.recapSteps.map((s) => s.ply);
@@ -295,7 +265,9 @@ export async function prefetchReviewCoachNotes(
     while (queue.length > 0) {
       const ply = queue.shift();
       if (ply === undefined) break;
-      const note = await loadReviewCoachNote(report, ply);
+      const note = await loadReviewCoachNote(report, ply, {
+        mistakeIntel: mistakesByPly?.get(ply),
+      });
       map.set(ply, note);
       done += 1;
       onProgress?.(done, total);

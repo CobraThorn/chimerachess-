@@ -14,6 +14,7 @@ import { getPersonalityById } from "../../ai/cognition/personality400";
 import { ensureLearning } from "../../ai/learning/learn";
 import type { ChimeraMemory } from "../../ai/types";
 import PhenotypeRadarChart, { type PhenotypeRadarSeries } from "./PhenotypeRadarChart";
+import PlyScrubber from "../ui/PlyScrubber";
 
 type CompareMode = "you" | "potential" | "elite" | "timeline";
 
@@ -219,13 +220,14 @@ export default function PhenotypeRadarPanel({
             <span>{timeline[0]?.label}</span>
             <span>{timeline[timelineLen - 1]?.label}</span>
           </div>
-          <input
-            type="range"
+          <PlyScrubber
+            className="mt-2"
             min={0}
             max={timelineLen - 1}
             value={timelineIndex ?? timelineLen - 1}
-            onChange={(e) => setTimelineIndex(Number(e.target.value))}
-            className="mt-2 w-full accent-[rgba(0,229,255,0.8)]"
+            onPreview={(v) => setTimelineIndex(v)}
+            onChange={(v) => setTimelineIndex(v)}
+            aria-label="Morph phenotype timeline"
           />
           <p className="mt-1 text-center font-[family-name:var(--font-hud)] text-[8px] text-[rgba(0,229,255,0.6)]">
             {timeline[timelineIndex ?? timelineLen - 1]?.label}

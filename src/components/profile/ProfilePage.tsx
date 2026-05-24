@@ -13,6 +13,8 @@ import { useChimeraProfile } from "../../hooks/useChimeraProfile";
 import CognitiveArchetypePanel from "../chess/CognitiveArchetypePanel";
 import ChimeraLearningPanel from "../chess/ChimeraLearningPanel";
 import ChimeraPhenotypeProfile from "../chimera/ChimeraPhenotypeProfile";
+import MistakeLabPanel from "../intelligence/MistakeLabPanel";
+import CognitiveProfileSection from "./cognitive/CognitiveProfileSection";
 import ChimeraMemoryRadar from "../chess/ChimeraMemoryRadar";
 import EloBadge from "../chess/EloBadge";
 import {
@@ -226,6 +228,10 @@ export default function ProfilePage() {
       <ChimeraLearningPanel memory={memory} />
 
       <ChimeraPhenotypeProfile memory={memory} />
+
+      <MistakeLabPanel memory={memory} />
+
+      <CognitiveProfileSection memory={memory} />
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Cognitive identity */}

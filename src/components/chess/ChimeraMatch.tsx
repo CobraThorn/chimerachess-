@@ -45,6 +45,7 @@ import {
 } from "../../chess";
 import { resolveBotMove } from "../../chess/resolveBotMove";
 import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
+import { createUserMoveClock } from "../../chess/userMoveClock";
 import { loadChimeraSetup } from "../../chimeraSetup/storage";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
@@ -95,7 +96,9 @@ export default function ChimeraMatch() {
     moves: GameMoveRecord[];
     mistakes: MistakeRecord[];
     startedAt: number;
+    userMoveTimesMs: number[];
   } | null>(null);
+  const userMoveClockRef = useRef(createUserMoveClock());
   const pendingMistakeAnalysesRef = useRef(0);
 
   const status = useMemo(() => getGameStatus(state), [state]);
@@ -154,11 +157,14 @@ export default function ChimeraMatch() {
     setGameOver(null);
     setReviewInput(null);
     dismiss();
+    userMoveClockRef.current = createUserMoveClock();
+    userMoveClockRef.current.markTurnStart();
     gameRef.current = {
       id: crypto.randomUUID(),
       moves: [],
       mistakes: [],
       startedAt: Date.now(),
+      userMoveTimesMs: userMoveClockRef.current.times,
     };
   }, [dismiss]);
 
@@ -225,6 +231,7 @@ export default function ChimeraMatch() {
           .slice(0, 6)
           .map((m) => m.uci)
           .join(" "),
+        userMoveTimesMs: [...g.userMoveTimesMs],
       };
       setMemory((prev) => {
         const next = finishGame(prev, stored);
@@ -340,6 +347,11 @@ export default function ChimeraMatch() {
 
   const positionFen = useMemo(() => toFen(state), [state]);
 
+  useEffect(() => {
+    if (gameOver || state.turn !== userColor) return;
+    userMoveClockRef.current.markTurnStart();
+  }, [gameOver, state.turn, userColor, positionFen]);
+
   /** Whenever it is CHIMERA's turn, play one move (recovers from engine stalls). */
   useEffect(() => {
     if (!sfReady || gameOver || chimeraThinking || chimeraTurnLockRef.current) return;
@@ -370,6 +382,7 @@ export default function ChimeraMatch() {
       setLegalTargets([]);
       setPromotionPick(null);
 
+      userMoveClockRef.current.recordMove();
       gameRef.current?.moves.push({
         uci,
         fen: toFen(next),
@@ -511,6 +524,7 @@ export default function ChimeraMatch() {
       loading={loading}
       progress={progress}
       error={reviewError}
+      memory={memory}
       onClose={() => {
         dismiss();
         setReviewInput(null);

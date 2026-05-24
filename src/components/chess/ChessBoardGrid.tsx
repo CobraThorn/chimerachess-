@@ -13,6 +13,7 @@ import {
   LAST_MOVE_FROM_OPACITY,
   LAST_MOVE_TO_OPACITY,
   lastMoveSquareTint,
+  squareCenterClient,
   squareToPercent,
   squareTranslateDelta,
 } from "./boardPointer";
@@ -79,6 +80,8 @@ export default function ChessBoardGrid({
 
   const boardRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
+  const ghostRaf = useRef(0);
+  const pendingGhost = useRef<{ x: number; y: number } | null>(null);
   const dragSession = useRef<{
     sq: Square;
     startX: number;
@@ -125,8 +128,29 @@ export default function ChessBoardGrid({
 
     ghost.style.width = `${size}px`;
     ghost.style.height = `${size}px`;
+    ghost.style.transition = "none";
     ghost.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${DRAG_LIFT_SCALE})`;
   }, []);
+
+  const scheduleGhostPosition = useCallback(
+    (clientX: number, clientY: number) => {
+      pendingGhost.current = { x: clientX, y: clientY };
+      if (ghostRaf.current) return;
+      ghostRaf.current = requestAnimationFrame(() => {
+        ghostRaf.current = 0;
+        const p = pendingGhost.current;
+        if (p) positionGhost(p.x, p.y);
+      });
+    },
+    [positionGhost]
+  );
+
+  useEffect(
+    () => () => {
+      if (ghostRaf.current) cancelAnimationFrame(ghostRaf.current);
+    },
+    []
+  );
 
   const showGhost = useCallback(
     (visual: DragVisual, clientX: number, clientY: number) => {
@@ -159,16 +183,31 @@ export default function ChessBoardGrid({
           ? clientToSquare(el.getBoundingClientRect(), clientX, clientY, flip)
           : null;
 
-      hideGhost();
-      setDragFromSq(null);
+      const commit = () => {
+        hideGhost();
+        setDragFromSq(null);
+        if (session.dragging && dropSq !== null) {
+          onSquareClick(dropSq);
+        } else if (!session.dragging) {
+          onSquareClick(fallbackSq);
+        }
+      };
 
-      if (session.dragging && dropSq !== null) {
-        onSquareClick(dropSq);
-      } else if (!session.dragging) {
-        onSquareClick(fallbackSq);
+      if (session.dragging && dropSq !== null && el) {
+        const rect = el.getBoundingClientRect();
+        const center = squareCenterClient(rect, dropSq, flip);
+        positionGhost(center.x, center.y);
+        const ghost = ghostRef.current;
+        if (ghost) {
+          ghost.style.transition = "transform 90ms cubic-bezier(0.33, 0, 0.1, 1)";
+          window.setTimeout(commit, 92);
+          return;
+        }
       }
+
+      commit();
     },
-    [flip, hideGhost, onSquareClick]
+    [flip, hideGhost, onSquareClick, positionGhost]
   );
 
   const onBoardPointerMove = useCallback(
@@ -183,7 +222,9 @@ export default function ChessBoardGrid({
       if (!session.dragging && dist >= DRAG_START_PX) {
         session.dragging = true;
         setDragFromSq(session.sq);
-        onSquareClick?.(session.sq);
+        if (selected !== session.sq) {
+          onSquareClick?.(session.sq);
+        }
 
         const piece = session.piece ?? state.board[session.sq];
         if (piece) {
@@ -194,10 +235,10 @@ export default function ChessBoardGrid({
 
       if (session.dragging) {
         e.preventDefault();
-        positionGhost(e.clientX, e.clientY);
+        scheduleGhostPosition(e.clientX, e.clientY);
       }
     },
-    [onSquareClick, positionGhost, showGhost]
+    [onSquareClick, scheduleGhostPosition, selected, showGhost, state.board]
   );
 
   const onBoardPointerUp = useCallback(

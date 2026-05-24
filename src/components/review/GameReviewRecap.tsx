@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { formatEvalLabel, evalToBarPercent } from "../../engine/analysis";
 import { isPositiveGrade, MOVE_GRADE_META } from "../../review/moveGrades";
 import { stateAtPly } from "../../review/replay";
@@ -6,6 +6,7 @@ import type { GameReviewReport, MoveGrade, ReviewCoachNote } from "../../review/
 import { uciToMove } from "../../chess";
 import type { BoardArrow } from "../chess/BoardAnnotations";
 import ChessBoardGrid from "../chess/ChessBoardGrid";
+import PlyScrubber from "../ui/PlyScrubber";
 import EvalBar from "../analyze/EvalBar";
 import { REVIEW_MOVE_DEPTH } from "../../review/reviewEngine";
 
@@ -32,26 +33,32 @@ export default function GameReviewRecap({
 }: GameReviewRecapProps) {
   const maxPly = Math.max(0, report.recapSteps.length - 1);
   const [ply, setPly] = useState(maxPly);
+  const [previewPly, setPreviewPly] = useState<number | null>(null);
+  const scrubbing = useRef(false);
   const [filter, setFilter] = useState<MoveGrade | "all">("all");
+
+  const activePly = previewPly ?? ply;
 
   useEffect(() => {
     setPly(maxPly);
+    setPreviewPly(null);
   }, [report.id, maxPly]);
 
   useEffect(() => {
+    if (scrubbing.current) return;
     onEnsureNote(ply);
   }, [ply, onEnsureNote]);
 
-  const userMove = report.userMoves.find((u) => u.ply === ply);
+  const userMove = report.userMoves.find((u) => u.ply === activePly);
 
   /** Show position *before* the user's move so best/played arrows line up with pieces. */
   const boardState = useMemo(() => {
     if (userMove) {
       return stateAtPly(report.moves, Math.max(0, userMove.ply - 1));
     }
-    return stateAtPly(report.moves, ply);
-  }, [report.moves, ply, userMove]);
-  const step = report.recapSteps[ply];
+    return stateAtPly(report.moves, activePly);
+  }, [report.moves, activePly, userMove]);
+  const step = report.recapSteps[activePly];
   const evalPt = useMemo(() => {
     if (userMove) {
       return (
@@ -59,8 +66,11 @@ export default function GameReviewRecap({
         report.evalTimeline[report.evalTimeline.length - 1]
       );
     }
-    return report.evalTimeline[ply] ?? report.evalTimeline[report.evalTimeline.length - 1];
-  }, [userMove, ply, report.evalTimeline]);
+    return (
+      report.evalTimeline[activePly] ??
+      report.evalTimeline[report.evalTimeline.length - 1]
+    );
+  }, [userMove, activePly, report.evalTimeline]);
   const note = notes.get(ply);
 
   const arrows = useMemo((): BoardArrow[] => {
@@ -82,11 +92,15 @@ export default function GameReviewRecap({
   }, [report.userMoves, filter]);
 
   const go = useCallback(
-    (next: number) => setPly(Math.max(0, Math.min(maxPly, next))),
+    (next: number) => {
+      setPreviewPly(null);
+      setPly(Math.max(0, Math.min(maxPly, next)));
+    },
     [maxPly]
   );
 
   const jumpToUserMove = (um: (typeof report.userMoves)[0]) => {
+    setPreviewPly(null);
     setPly(um.ply);
   };
 
@@ -210,19 +224,31 @@ export default function GameReviewRecap({
             <NavBtn onClick={() => go(0)} label="⏮" title="Start" />
             <NavBtn onClick={() => go(ply - 1)} label="◀" disabled={ply <= 0} />
             <span className="min-w-[4rem] text-center font-[family-name:var(--font-hud)] text-[10px] tracking-[0.15em] text-[rgba(255,255,255,0.5)]">
-              {ply}/{maxPly}
+              {activePly}/{maxPly}
             </span>
             <NavBtn onClick={() => go(ply + 1)} label="▶" disabled={ply >= maxPly} />
             <NavBtn onClick={() => go(maxPly)} label="⏭" />
           </div>
 
-          <input
-            type="range"
+          <PlyScrubber
+            className="mt-3"
             min={0}
             max={maxPly}
             value={ply}
-            onChange={(e) => go(Number(e.target.value))}
-            className="mt-3 w-full accent-[rgba(0,229,255,0.6)]"
+            onScrubStart={() => {
+              scrubbing.current = true;
+            }}
+            onPreview={(v) => {
+              startTransition(() => setPreviewPly(v));
+            }}
+            onChange={(v) => {
+              setPreviewPly(null);
+              setPly(v);
+            }}
+            onScrubEnd={(v) => {
+              scrubbing.current = false;
+              onEnsureNote(v);
+            }}
             aria-label="Scrub game"
           />
 
@@ -240,13 +266,15 @@ export default function GameReviewRecap({
                   type="button"
                   onClick={() => go(i)}
                   className={`min-w-[3px] flex-1 rounded-t-sm ${
-                    i === ply ? "ring-1 ring-[rgba(0,229,255,0.7)]" : "opacity-75 hover:opacity-100"
+                    i === activePly
+                      ? "ring-1 ring-[rgba(0,229,255,0.7)]"
+                      : "opacity-75 hover:opacity-100"
                   }`}
                   style={{
                     height: `${Math.max(10, h)}%`,
                     background: bad
                       ? "rgba(248,113,113,0.55)"
-                      : i === ply
+                      : i === activePly
                         ? "rgba(0,229,255,0.5)"
                         : "rgba(134,239,172,0.35)",
                   }}
