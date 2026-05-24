@@ -14,6 +14,7 @@ import StockfishAnalysis from "./analyze/StockfishAnalysis";
 import OpeningTrainer from "./train/OpeningTrainer";
 import ProfilePage from "./profile/ProfilePage";
 import SettingsSection from "./settings/SettingsSection";
+import LegendsSection from "./legends/LegendsSection";
 
 const FEATURE_SECTIONS = [
   {
@@ -38,7 +39,7 @@ const FEATURE_SECTIONS = [
     id: "legends",
     tag: "LEGENDS — ARCHIVE",
     title: "Where Chess Lives",
-    body: "Legendary players, greatest games, famous sacrifices, historical timelines, style comparisons — play like Tal, channel Kasparov aggression.",
+    body: "Six immortal profiles—portraits, style radars, four-sentence biographies, and interactive replays of their finest games.",
   },
   {
     id: "social",
@@ -92,7 +93,9 @@ export default function LandingPage() {
         >
           <div
             className={`glass-panel relative rounded-sm p-10 md:p-14 ${
-              section.id === "analyze" ? "overflow-visible" : "overflow-hidden"
+              section.id === "analyze" || section.id === "legends"
+                ? "overflow-visible"
+                : "overflow-hidden"
             }`}
           >
             <span className="hud-corner hud-corner--tl" />
@@ -121,6 +124,8 @@ export default function LandingPage() {
             {section.id === "train" && <OpeningTrainer />}
 
             {section.id === "profile" && <ProfilePage />}
+
+            {section.id === "legends" && <LegendsSection />}
 
             <motion.div
               className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[rgba(232,197,71,0.04)] blur-3xl"
