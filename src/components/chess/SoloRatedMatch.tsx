@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   analyzeUserMove,
   createPlayStyleProfile,
@@ -465,10 +465,8 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
       const piece = state.board[sq];
       if (!piece || piece.color !== userColor) return;
       if (selected === sq && legalTargets.length > 0) return;
-      startTransition(() => {
-        setSelected(sq);
-        setLegalTargets(getLegalMoves(state, sq));
-      });
+      setSelected(sq);
+      setLegalTargets(getLegalMoves(state, sq));
     },
     [
       userTurn,

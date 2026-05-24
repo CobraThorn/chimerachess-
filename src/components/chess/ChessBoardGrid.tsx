@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCustomisation } from "../../customisation";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import BoardAnnotations, { type BoardArrow } from "./BoardAnnotations";
@@ -10,8 +10,11 @@ import {
   clientToSquare,
   DRAG_LIFT_SCALE,
   DRAG_START_PX,
+  squareCenterClient,
   squareToPercent,
   squareTranslateDelta,
+  DRAG_DROP_EASE,
+  DRAG_DROP_SNAP_MS,
 } from "./boardPointer";
 
 export interface ChessBoardGridProps {
@@ -103,26 +106,36 @@ export default function ChessBoardGrid({
   const [dragPiece, setDragPiece] = useState<DragVisual | null>(null);
   const [slide, setSlide] = useState<SlideAnim | null>(null);
   const prevMoveKey = useRef<string | null>(null);
+  const prevBoardRef = useRef(state.board);
+  const skipNextSlideRef = useRef(false);
 
   const legalLookup = useMemo(
     () => buildLegalLookup(legalTargets, state.board),
     [legalTargets, state.board]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const prevBoard = prevBoardRef.current;
+    prevBoardRef.current = state.board;
+
     if (!lastMove) return;
+    if (skipNextSlideRef.current) {
+      skipNextSlideRef.current = false;
+      return;
+    }
+
     const key = `${lastMove.from}-${lastMove.to}-${lastMove.promotion ?? ""}`;
     if (key === prevMoveKey.current) return;
     prevMoveKey.current = key;
 
-    const landed = state.board[lastMove.to];
-    if (!landed) return;
+    const moved = prevBoard[lastMove.from];
+    if (!moved) return;
 
     setSlide({
       from: lastMove.from,
       to: lastMove.to,
-      color: landed.color,
-      type: landed.type,
+      color: moved.color,
+      type: moved.type,
       key: Date.now(),
     });
     const t = window.setTimeout(() => setSlide(null), MOVE_SLIDE_MS + 40);
@@ -214,8 +227,28 @@ export default function ChessBoardGrid({
     windowDragCleanup.current = null;
   }, []);
 
+  const snapGhostToSquare = useCallback(
+    (sq: Square): Promise<void> => {
+      const ghost = ghostRef.current;
+      const rect = boardRectRef.current;
+      if (!ghost || !rect) return Promise.resolve();
+
+      const { x, y } = squareCenterClient(rect, sq, flip);
+      const size = rect.width / 8;
+      const tx = x - rect.left - size / 2;
+      const ty = y - rect.top - size / 2;
+
+      return new Promise((resolve) => {
+        ghost.style.transition = `transform ${DRAG_DROP_SNAP_MS}ms ${DRAG_DROP_EASE}`;
+        ghost.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${DRAG_LIFT_SCALE})`;
+        window.setTimeout(resolve, DRAG_DROP_SNAP_MS);
+      });
+    },
+    [flip]
+  );
+
   const finishPointer = useCallback(
-    (clientX: number, clientY: number, fallbackSq: Square) => {
+    async (clientX: number, clientY: number, fallbackSq: Square) => {
       detachWindowDrag();
       const session = dragSession.current;
       dragSession.current = null;
@@ -231,15 +264,29 @@ export default function ChessBoardGrid({
           ? clientToSquare(el.getBoundingClientRect(), clientX, clientY, flip)
           : null;
 
+      if (session.dragging && dropSq !== null) {
+        refreshBoardRect();
+        await snapGhostToSquare(dropSq);
+        skipNextSlideRef.current = true;
+        hideGhost();
+        onSquareClick(dropSq);
+        return;
+      }
+
       hideGhost();
 
-      if (session.dragging && dropSq !== null) {
-        onSquareClick(dropSq);
-      } else if (!session.dragging) {
+      if (!session.dragging) {
         onSquareClick(fallbackSq);
       }
     },
-    [detachWindowDrag, flip, hideGhost, onSquareClick]
+    [
+      detachWindowDrag,
+      flip,
+      hideGhost,
+      onSquareClick,
+      refreshBoardRect,
+      snapGhostToSquare,
+    ]
   );
 
   const attachWindowDrag = useCallback(
@@ -337,6 +384,21 @@ export default function ChessBoardGrid({
     [interactive, onPiecePress, refreshBoardRect, state.board]
   );
 
+  const onGridPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      const target = (e.target as HTMLElement).closest<HTMLElement>(
+        "[data-square]"
+      );
+      if (!target) return;
+      const raw = target.dataset.square;
+      if (raw === undefined) return;
+      const sq = Number(raw) as Square;
+      if (sq < 0 || sq > 63) return;
+      onSquarePointerDown(sq, e);
+    },
+    [onSquarePointerDown]
+  );
+
   const slideGlide = slide
     ? {
         ...squareToPercent(slide.from, flip),
@@ -367,7 +429,8 @@ export default function ChessBoardGrid({
       >
         <div
           className="grid size-full grid-cols-8 grid-rows-8 border box-border"
-          style={{ borderColor: boardTheme.border }}
+          style={{ borderColor: boardTheme.border, contain: "layout style paint" }}
+          onPointerDown={interactive ? onGridPointerDown : undefined}
         >
           {Array.from({ length: 64 }, (_, visualIndex) => {
             const vr = Math.floor(visualIndex / 8);
@@ -404,9 +467,6 @@ export default function ChessBoardGrid({
                 isEngineTo={engineHighlight?.to === sq}
                 heat={squareHeats?.get(sq)}
                 hidePiece={hideForSlide}
-                onPointerDown={
-                  interactive ? (e) => onSquarePointerDown(sq, e) : undefined
-                }
               />
             );
           })}

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCustomisation } from "../../customisation";
 import { useGameClock } from "../../online/useGameClock";
 import type { OnlineClientState } from "../../online/useOnlineClient";
@@ -217,10 +217,8 @@ export default function OnlineMatch({
       const piece = state.board[sq];
       if (!piece || piece.color !== userColor) return;
       if (selected === sq && legalTargets.length > 0) return;
-      startTransition(() => {
-        setSelected(sq);
-        setLegalTargets(getLegalMoves(state, sq));
-      });
+      setSelected(sq);
+      setLegalTargets(getLegalMoves(state, sq));
     },
     [
       userTurn,

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { PieceSet } from "../../customisation";
 import type { Color, PieceType } from "../../chess";
 
@@ -26,7 +27,7 @@ interface ChessPieceProps {
 }
 
 /** Fills ~90% of the square — chess.com-style sizing. */
-export default function ChessPiece({ color, type, pieceSet }: ChessPieceProps) {
+function ChessPiece({ color, type, pieceSet }: ChessPieceProps) {
   if (usesUnicodePieces(pieceSet)) {
     return (
       <span
@@ -54,3 +55,11 @@ export default function ChessPiece({ color, type, pieceSet }: ChessPieceProps) {
     />
   );
 }
+
+export default memo(
+  ChessPiece,
+  (a, b) =>
+    a.color === b.color &&
+    a.type === b.type &&
+    a.pieceSet.id === b.pieceSet.id
+);

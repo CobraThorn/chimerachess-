@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCustomisation } from "../../customisation";
 import {
   createInitialState,
@@ -114,10 +114,8 @@ export default function ChessBoard({
       const piece = state.board[sq];
       if (!piece || piece.color !== state.turn) return;
       if (selected === sq && legalTargets.length > 0) return;
-      startTransition(() => {
-        setSelected(sq);
-        setLegalTargets(getLegalMoves(state, sq));
-      });
+      setSelected(sq);
+      setLegalTargets(getLegalMoves(state, sq));
     },
     [status.type, promotionPick, state, selected, legalTargets.length]
   );
