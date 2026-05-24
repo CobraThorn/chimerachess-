@@ -93,7 +93,10 @@ export default function LandingPage() {
         >
           <div
             className={`glass-panel relative rounded-sm p-10 md:p-14 ${
-              section.id === "analyze" || section.id === "legends"
+              section.id === "analyze" ||
+              section.id === "legends" ||
+              section.id === "play" ||
+              section.id === "train"
                 ? "overflow-visible"
                 : "overflow-hidden"
             }`}

@@ -281,6 +281,10 @@ export default function ChimeraMatch() {
       chimeraTurnLockRef.current = true;
       setChimeraThinking(true);
       const thinkStart = Date.now();
+      const thinkWatchdog = window.setTimeout(() => {
+        chimeraTurnLockRef.current = false;
+        setChimeraThinking(false);
+      }, 45_000);
       try {
         engine.stop();
         mistakeEngineRef.current?.stop();
@@ -325,6 +329,7 @@ export default function ChimeraMatch() {
 
         resolveGameEnd(next);
       } finally {
+        window.clearTimeout(thinkWatchdog);
         chimeraTurnLockRef.current = false;
         setChimeraThinking(false);
       }
@@ -602,11 +607,17 @@ export default function ChimeraMatch() {
               : "ring-1 ring-[rgba(255,255,255,0.04)]"
           }`}
         >
-          {chimeraThinking && (
-            <motion.div
-              className="pointer-events-none absolute inset-0 z-20 rounded-sm bg-[radial-gradient(ellipse_at_50%_50%,rgba(0,229,255,0.14)_0%,transparent_70%)]"
-              animate={{ opacity: [0.4, 0.85, 0.4] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+          {!sfReady && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-sm bg-[rgba(5,5,10,0.55)]">
+              <span className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.2em] text-[rgba(0,229,255,0.8)]">
+                Loading chess engine…
+              </span>
+            </div>
+          )}
+          {chimeraThinking && sfReady && (
+            <div
+              className="pointer-events-none absolute inset-0 z-10 rounded-sm bg-[rgba(0,229,255,0.06)]"
+              aria-hidden
             />
           )}
           {userTurn && !gameOver && !chimeraThinking && (
@@ -642,8 +653,12 @@ export default function ChimeraMatch() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="absolute inset-0 z-30 flex items-center justify-center bg-[rgba(5,5,8,0.85)]"
+                onClick={() => setPromotionPick(null)}
               >
-                <div className="glass-panel rounded-sm px-6 py-4">
+                <div
+                  className="board-frame rounded-sm px-6 py-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <p className="mb-3 text-center font-[family-name:var(--font-hud)] text-[9px] tracking-[0.3em] text-[rgba(232,197,71,0.7)]">
                     PROMOTE
                   </p>

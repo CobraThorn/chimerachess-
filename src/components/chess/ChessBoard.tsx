@@ -215,9 +215,13 @@ export default function ChessBoard({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-30 flex items-center justify-center rounded-sm bg-[rgba(5,5,8,0.85)] backdrop-blur-sm"
+              className="absolute inset-0 z-30 flex items-center justify-center rounded-sm bg-[rgba(5,5,8,0.85)]"
+              onClick={() => setPromotionPick(null)}
             >
-              <div className="glass-panel rounded-sm px-6 py-4 text-center">
+              <div
+                className="board-frame rounded-sm px-6 py-4 text-center"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <p className="mb-4 font-[family-name:var(--font-hud)] text-[9px] tracking-[0.3em] text-[rgba(232,197,71,0.7)] uppercase">
                   Promote
                 </p>

@@ -34,7 +34,7 @@ export default function ChessPiece({ color, type, pieceSet }: ChessPieceProps) {
           "pointer-events-none flex h-[88%] w-[88%] max-h-full max-w-full select-none items-center justify-center leading-none",
           color === "w" ? pieceSet.whiteClass : pieceSet.blackClass,
         ].join(" ")}
-        style={{ fontSize: "min(88cqmin, 88%)" }}
+        style={{ fontSize: "clamp(1.1rem, 12vw, 3.25rem)" }}
         aria-hidden
       >
         {pieceSet.symbols[color][type]}

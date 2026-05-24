@@ -317,8 +317,12 @@ export default function OnlineMatch({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="absolute inset-0 z-30 flex items-center justify-center bg-[rgba(5,5,8,0.85)]"
+                onClick={() => setPromotionPick(null)}
               >
-                <div className="glass-panel rounded-sm px-6 py-4">
+                <div
+                  className="board-frame rounded-sm px-6 py-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <p className="mb-3 text-center font-[family-name:var(--font-hud)] text-[9px] tracking-[0.3em] text-[rgba(232,197,71,0.7)]">
                     PROMOTE
                   </p>
