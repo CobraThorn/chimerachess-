@@ -41,7 +41,14 @@ export function useOnlineClient() {
   }, []);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    const existing = wsRef.current;
+    if (
+      existing &&
+      (existing.readyState === WebSocket.OPEN ||
+        existing.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
 
     patch({ phase: "connecting", error: null });
     const ws = new WebSocket(onlineWsUrl());
@@ -133,7 +140,7 @@ export function useOnlineClient() {
             clock: msg.clock as OnlineMatchInfo["clock"],
             turnStartedAt: Number(msg.turnStartedAt ?? Date.now()),
           };
-          patch({ match: { ...matchRef.current } });
+          patch({ match: { ...matchRef.current }, error: null });
           break;
         }
         case "game_over":
@@ -260,6 +267,12 @@ export function useOnlineClient() {
     });
   }, [patch]);
 
+  const clearTransientError = useCallback(() => {
+    setState((s) =>
+      s.phase === "playing" ? { ...s, error: null } : s
+    );
+  }, []);
+
   useEffect(() => () => disconnect(), [disconnect]);
 
   return {
@@ -273,5 +286,6 @@ export function useOnlineClient() {
     offerDraw,
     acceptDraw,
     resetToLobby,
+    clearTransientError,
   };
 }

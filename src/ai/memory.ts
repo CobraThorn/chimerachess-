@@ -135,16 +135,23 @@ export function loadMemory(): ChimeraMemory {
   }
 }
 
+export const CHIMERA_MEMORY_SAVE_FAILED = "chimera-memory-save-failed";
+export const CHIMERA_MEMORY_SAVED = "chimera-memory-saved";
+
 export function saveMemory(memory: ChimeraMemory): boolean {
   try {
     localStorage.setItem(CHIMERA_STORAGE_KEY, JSON.stringify(memory));
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(CHIMERA_MEMORY_EVENT));
+      window.dispatchEvent(new CustomEvent(CHIMERA_MEMORY_SAVED));
     }
     return true;
   } catch {
     if (import.meta.env?.DEV) {
       console.warn("[CHIMERA] Could not save memory — storage may be full.");
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(CHIMERA_MEMORY_SAVE_FAILED));
     }
     return false;
   }

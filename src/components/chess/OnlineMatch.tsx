@@ -36,6 +36,7 @@ interface OnlineMatchProps {
   onResign: () => void;
   onOfferDraw: () => void;
   onAcceptDraw: () => void;
+  onClearMoveError: () => void;
   onBack: () => void;
 }
 
@@ -63,6 +64,7 @@ export default function OnlineMatch({
   onResign,
   onOfferDraw,
   onAcceptDraw,
+  onClearMoveError,
   onBack,
 }: OnlineMatchProps) {
   const { pieceSet } = useCustomisation();
@@ -220,7 +222,7 @@ export default function OnlineMatch({
   lastServerFenRef.current = match.fen;
 
   useEffect(() => {
-    if (!client.error) return;
+    if (!client.error || client.phase !== "playing") return;
     const next = fromFen(lastServerFenRef.current);
     if (next) {
       setState(next);
@@ -228,7 +230,8 @@ export default function OnlineMatch({
       setLegalTargets([]);
       setPromotionPick(null);
     }
-  }, [client.error]);
+    onClearMoveError();
+  }, [client.error, client.phase, onClearMoveError]);
 
   const turn = state.turn;
   const userTurn = turn === userColor;

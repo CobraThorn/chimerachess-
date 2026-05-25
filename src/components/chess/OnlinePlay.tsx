@@ -22,6 +22,7 @@ export default function OnlinePlay({ initialTc = null }: OnlinePlayProps) {
     offerDraw,
     acceptDraw,
     resetToLobby,
+    clearTransientError,
   } = useOnlineClient();
 
   const [activeTc, setActiveTc] = useState<TimeControlId | null>(initialTc);
@@ -88,6 +89,7 @@ export default function OnlinePlay({ initialTc = null }: OnlinePlayProps) {
         onResign={resign}
         onOfferDraw={offerDraw}
         onAcceptDraw={acceptDraw}
+        onClearMoveError={clearTransientError}
         onBack={() => {
           resetToLobby();
           disconnect();

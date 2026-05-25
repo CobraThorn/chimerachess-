@@ -25,6 +25,18 @@ export function buildSaveBundle(): ChimeraSaveBundle {
   };
 }
 
+function applyMemoryFromBundle(memory: unknown): void {
+  if (!memory || typeof memory !== "object") return;
+  try {
+    const parsed = memory as { version?: number; games?: unknown };
+    if (parsed.version !== 1 || !Array.isArray(parsed.games)) return;
+    localStorage.setItem(CHIMERA_STORAGE_KEY, JSON.stringify(memory));
+    saveMemory(loadMemory());
+  } catch {
+    /* ignore corrupt backup */
+  }
+}
+
 export function applySaveBundle(bundle: ChimeraSaveBundle): void {
   if (bundle.customisation) {
     saveCustomisation(bundle.customisation);
@@ -35,13 +47,9 @@ export function applySaveBundle(bundle: ChimeraSaveBundle): void {
     if (bundle.setup.completedAt) {
       markChimeraSetupComplete();
     }
-  } else if (bundle.memory) {
-    try {
-      localStorage.setItem(CHIMERA_STORAGE_KEY, JSON.stringify(bundle.memory));
-      saveMemory(loadMemory());
-    } catch {
-      /* ignore corrupt backup */
-    }
+  }
+  if (bundle.memory) {
+    applyMemoryFromBundle(bundle.memory);
   }
 }
 

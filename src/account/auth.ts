@@ -10,8 +10,8 @@ import type { ChimeraSaveBundle } from "../chimeraSetup/types";
 import { isValidEmail, isValidPassword, normalizeEmail } from "./validation";
 import {
   loadAccount,
-  registerAccount as createLocalAccount,
   saveAccount,
+  signOut,
 } from "./storage";
 import type { DataConsents, UserAccount } from "./types";
 
@@ -27,12 +27,44 @@ function activeSession(account: UserAccount): UserAccount {
   };
 }
 
-async function restoreCloudSave(
-  accountId: string,
-  bundleFromLogin?: ChimeraSaveBundle | null
-): Promise<void> {
-  const bundle = bundleFromLogin ?? (await fetchUserBackup(accountId));
-  restoreSaveForAccount(accountId, bundle);
+function buildAccountRecord(input: {
+  email: string;
+  phone: string | null;
+  displayName: string;
+  consents: DataConsents;
+  id?: string;
+  createdAt?: number;
+  chimeraSetupComplete?: boolean;
+}): UserAccount {
+  const now = Date.now();
+  return {
+    id: input.id ?? crypto.randomUUID(),
+    email: input.email,
+    phone: input.phone,
+    displayName: input.displayName.trim() || "Player",
+    createdAt: input.createdAt ?? now,
+    lastLoginAt: now,
+    consents: input.consents,
+    isLoggedIn: false,
+    chimeraSetupComplete: input.chimeraSetupComplete === true,
+  };
+}
+
+function commitSession(
+  account: UserAccount,
+  cloudSave?: ChimeraSaveBundle | null
+): UserAccount {
+  const session = activeSession(account);
+  saveAccount(session);
+  if (cloudSave) {
+    restoreSaveForAccount(account.id, cloudSave);
+  } else {
+    void fetchUserBackup(account.id).then((remote) => {
+      if (remote) restoreSaveForAccount(account.id, remote);
+    });
+  }
+  scheduleSync(800);
+  return session;
 }
 
 /**
@@ -52,29 +84,6 @@ export async function loginWithPassword(
   }
 
   const local = loadAccount();
-  if (local && normalizeEmail(local.email) === norm) {
-    const account = activeSession(local);
-    saveAccount(account);
-    const cloud = await loginRemote(norm, pw.password);
-    if (!cloud) {
-      const reg = await registerAccountRemote(account, pw.password);
-      if (!reg.ok) {
-        return {
-          ok: false,
-          error: reg.error ?? "Could not reach the cloud. Try again.",
-        };
-      }
-    } else {
-      await restoreCloudSave(account.id, cloud.save);
-    }
-    scheduleSync(800);
-    return {
-      ok: true,
-      account,
-      message: "Signed in on this device.",
-    };
-  }
-
   if (local && normalizeEmail(local.email) !== norm) {
     return {
       ok: false,
@@ -83,23 +92,58 @@ export async function loginWithPassword(
     };
   }
 
-  const lookup = await loginRemote(norm, pw.password);
-  if (lookup) {
-    const account = activeSession(remoteToUserAccount(lookup.account));
-    saveAccount(account);
-    await restoreCloudSave(account.id, lookup.save);
-    scheduleSync(800);
+  if (local) {
+    const account = { ...local, email: norm };
+    const cloud = await loginRemote(norm, pw.password);
+    if (!cloud) {
+      const reg = await registerAccountRemote(account, pw.password);
+      if (!reg.ok) {
+        signOut();
+        return {
+          ok: false,
+          error:
+            reg.error ??
+            "Invalid email or password. Register if this is a new account.",
+        };
+      }
+      const session = commitSession(account);
+      return {
+        ok: true,
+        account: session,
+        message: "Signed in on this device.",
+      };
+    }
+    const session = commitSession(
+      {
+        ...remoteToUserAccount(cloud.account),
+        ...account,
+        email: norm,
+        displayName: cloud.account.displayName || account.displayName,
+        consents: account.consents,
+      },
+      cloud.save
+    );
     return {
       ok: true,
-      account,
-      message: "Signed in — account restored from the cloud.",
+      account: session,
+      message: "Signed in on this device.",
     };
   }
 
+  const cloud = await loginRemote(norm, pw.password);
+  if (!cloud) {
+    return {
+      ok: false,
+      error:
+        "Invalid email or password, or no cloud account. Register if you are new.",
+    };
+  }
+
+  const session = commitSession(remoteToUserAccount(cloud.account), cloud.save);
   return {
-    ok: false,
-    error:
-      "Invalid email or password, or no cloud account. Register if you are new.",
+    ok: true,
+    account: session,
+    message: "Signed in — account restored from the cloud.",
   };
 }
 
@@ -128,47 +172,7 @@ export async function registerUser(input: {
     };
   }
 
-  const lookup = await loginRemote(norm, pw.password);
-  if (lookup) {
-    const account = activeSession({
-      ...remoteToUserAccount(lookup.account),
-      phone: input.phone,
-      displayName:
-        input.displayName.trim() || lookup.account.displayName || "Player",
-      consents: input.consents,
-    });
-    saveAccount(account);
-    await restoreCloudSave(account.id, lookup.save);
-    scheduleSync(800);
-    return {
-      ok: true,
-      account,
-      message: "Welcome back — we found your account in the cloud and signed you in.",
-    };
-  }
-
   const local = loadAccount();
-  if (local && normalizeEmail(local.email) === norm) {
-    const account = activeSession({
-      ...local,
-      phone: input.phone,
-      displayName: input.displayName.trim() || local.displayName,
-      consents: input.consents,
-    });
-    saveAccount(account);
-    const reg = await registerAccountRemote(account, pw.password);
-    if (!reg.ok) {
-      return { ok: false, error: reg.error ?? "Could not register with cloud." };
-    }
-    await restoreCloudSave(account.id);
-    scheduleSync(800);
-    return {
-      ok: true,
-      account,
-      message: "Account updated and signed in.",
-    };
-  }
-
   if (local && normalizeEmail(local.email) !== norm) {
     return {
       ok: false,
@@ -177,23 +181,57 @@ export async function registerUser(input: {
     };
   }
 
-  const account = createLocalAccount({
-    email: norm,
-    phone: input.phone,
-    displayName: input.displayName,
-    consents: input.consents,
-  });
-  const reg = await registerAccountRemote(account, pw.password);
-  if (!reg.ok) {
+  const lookup = await loginRemote(norm, pw.password);
+  if (lookup) {
+    const session = commitSession(
+      {
+        ...remoteToUserAccount(lookup.account),
+        phone: input.phone,
+        displayName:
+          input.displayName.trim() || lookup.account.displayName || "Player",
+        consents: input.consents,
+      },
+      lookup.save
+    );
     return {
-      ok: false,
-      error: reg.error ?? "Could not create cloud account. Try again.",
+      ok: true,
+      account: session,
+      message:
+        "Welcome back — we found your account in the cloud and signed you in.",
     };
   }
+
+  const account = local
+    ? {
+        ...local,
+        phone: input.phone,
+        displayName: input.displayName.trim() || local.displayName,
+        consents: input.consents,
+        isLoggedIn: false,
+      }
+    : buildAccountRecord({
+        email: norm,
+        phone: input.phone,
+        displayName: input.displayName,
+        consents: input.consents,
+      });
+
+  const cloud = await registerAccountRemote(account, pw.password);
+  if (!cloud.ok) {
+    signOut();
+    return {
+      ok: false,
+      error: cloud.error ?? "Could not create cloud account. Try again.",
+    };
+  }
+
+  const session = commitSession(account);
   return {
     ok: true,
-    account,
-    message: "Account created — customise your CHIMERA next.",
+    account: session,
+    message: local
+      ? "Account updated and signed in."
+      : "Account created — customise your CHIMERA next.",
   };
 }
 
