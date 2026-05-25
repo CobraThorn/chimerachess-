@@ -81,11 +81,12 @@ export function createUciWorkerEngine(scriptUrl: string): ChessEngine {
     send(cmd: string, onComplete?: (output: string) => void) {
       const trimmed = cmd.trim();
       const noReply =
-        trimmed === "ucinewgame" ||
-        trimmed === "stop" ||
-        trimmed === "ponderhit" ||
-        trimmed.startsWith("position") ||
-        trimmed.startsWith("setoption");
+        !onComplete &&
+        (trimmed === "ucinewgame" ||
+          trimmed === "stop" ||
+          trimmed === "ponderhit" ||
+          trimmed.startsWith("position") ||
+          trimmed.startsWith("setoption"));
 
       const run = (): Promise<void> => {
         if (!noReply) {
@@ -103,7 +104,6 @@ export function createUciWorkerEngine(scriptUrl: string): ChessEngine {
           });
         }
         sendRaw(trimmed);
-        if (onComplete) setTimeout(() => onComplete(""), 0);
         return Promise.resolve();
       };
 

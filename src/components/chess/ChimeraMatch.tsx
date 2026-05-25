@@ -55,6 +55,7 @@ import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
 import { isLowPowerDevice } from "../../utils/deviceCapability";
+import { reviewDiag } from "../../review/reviewDiagnostics";
 import { useGameReview } from "../../hooks/useGameReview";
 import { watchReviewEngineReady } from "../../review/reviewEngineBoot";
 import type { GameReviewInput } from "../../review/types";
@@ -154,7 +155,24 @@ export default function ChimeraMatch() {
     []
   );
 
-  useEffect(() => {
+  const releasePlayEngines = useCallback(() => {
+    const lowPower = isLowPowerDevice();
+    const play = engineRef.current;
+    const mistake = mistakeEngineRef.current;
+    play?.stop();
+    mistake?.stop();
+    void play?.quit();
+    if (!lowPower && mistake && mistake !== play) void mistake.quit();
+    engineRef.current = null;
+    mistakeEngineRef.current = null;
+    setSfReady(false);
+  }, []);
+
+  const bootPlayEngines = useCallback(() => {
+    if (engineRef.current?.ready) {
+      setSfReady(true);
+      return () => {};
+    }
     const lowPower = isLowPowerDevice();
     const engine = createStockfishEngine();
     const mistakeEngine = lowPower ? engine : createStockfishEngine();
@@ -174,18 +192,21 @@ export default function ChimeraMatch() {
         setSfReady(true);
         clearInterval(t);
       }
+      if (engine.loadFailed) clearInterval(t);
     }, 100);
+
     return () => {
       clearInterval(t);
       document.removeEventListener("visibilitychange", onVisibility);
       engine.stop();
-      if (!lowPower) {
+      if (!lowPower && mistakeEngine !== engine) {
         mistakeEngine.stop();
         mistakeEngine.quit();
       }
       engine.quit();
       engineRef.current = null;
       mistakeEngineRef.current = null;
+      setSfReady(false);
     };
   }, []);
 
@@ -235,9 +256,16 @@ export default function ChimeraMatch() {
   useEffect(() => {
     if (!reviewInput) return;
 
-    engineRef.current?.stop();
-    mistakeEngineRef.current?.stop();
+    const input = reviewInput;
+    reviewDiag("trigger", {
+      gameId: input.id,
+      moves: input.moves.length,
+      userColor: input.userColor,
+    });
+
+    releasePlayEngines();
     pendingMistakeAnalysesRef.current = 0;
+
     const engine = createStockfishEngine();
     reviewEngineRef.current = engine;
     let cancelled = false;
@@ -246,15 +274,21 @@ export default function ChimeraMatch() {
       engine,
       () => {
         if (cancelled) return;
-        void (async () => {
-          const torch = await acquireSharedTorch();
-          if (!cancelled) void runReview(engine, reviewInput, torch);
-        })();
+        void acquireSharedTorch().then((torch) => {
+          if (!cancelled) void runReview(engine, input, torch);
+        });
       },
       () => {
         if (!cancelled) {
           failReview(
             "Stockfish did not start in time — refresh the page and try again."
+          );
+        }
+      },
+      () => {
+        if (!cancelled) {
+          failReview(
+            "Stockfish failed to load — refresh the page and try again."
           );
         }
       }
@@ -268,7 +302,13 @@ export default function ChimeraMatch() {
       engine.quit();
       reviewEngineRef.current = null;
     };
-  }, [reviewInput, runReview, abortReview, failReview]);
+  }, [
+    reviewInput?.id,
+    releasePlayEngines,
+    runReview,
+    abortReview,
+    failReview,
+  ]);
 
   useEffect(() => {
     const onMemoryUpdate = () => setMemory(loadMemory());
@@ -645,6 +685,11 @@ export default function ChimeraMatch() {
 
   const reviewOpen =
     !!reviewInput || loading || !!report || !!reviewError;
+
+  useEffect(() => {
+    if (reviewOpen) return;
+    return bootPlayEngines();
+  }, [reviewOpen, bootPlayEngines]);
 
   /** Skip CRS modal when review takes over; clear so it does not reappear after close. */
   useEffect(() => {

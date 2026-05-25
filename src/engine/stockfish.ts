@@ -192,21 +192,16 @@ export function getEvaluation(
   return withSearchHardTimeout(search, engine);
 }
 
-/** One search: root eval + top N lines (scores from White's perspective). */
-export function searchPosition(
+function runSearch(
   engine: StockfishEngine,
   fen: string,
   depth: number,
   multiPv: number
 ): Promise<{ eval: EvalResult; topMoves: { move: string; cp: number }[] }> {
-  const search = new Promise<{
-    eval: EvalResult;
-    topMoves: { move: string; cp: number }[];
-  }>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     engine.stop();
-    engine.send(`setoption name MultiPV value ${multiPv}`);
-    engine.send(`position fen ${fen}`);
-    engine.send(`go depth ${depth}`, (out) => {
+
+    const finishSearch = (out: string) => {
       try {
         resolve({
           eval: parseEvalFromOutput(out),
@@ -214,12 +209,42 @@ export function searchPosition(
         });
       } catch (err) {
         reject(err);
-      } finally {
-        engine.send(`setoption name MultiPV value 1`);
       }
-    });
+    };
+
+    const resetMultiPv = (out: string) => {
+      if (multiPv <= 1) {
+        finishSearch(out);
+        return;
+      }
+      engine.send("setoption name MultiPV value 1", () => {
+        engine.send("isready", () => finishSearch(out));
+      });
+    };
+
+    const startGo = () => {
+      engine.send(`position fen ${fen}`);
+      engine.send(`go depth ${depth}`, resetMultiPv);
+    };
+
+    if (multiPv > 1) {
+      engine.send(`setoption name MultiPV value ${multiPv}`, () => {
+        engine.send("isready", startGo);
+      });
+    } else {
+      startGo();
+    }
   });
-  return withSearchHardTimeout(search, engine);
+}
+
+/** One search: root eval + top N lines (scores from White's perspective). */
+export function searchPosition(
+  engine: StockfishEngine,
+  fen: string,
+  depth: number,
+  multiPv: number
+): Promise<{ eval: EvalResult; topMoves: { move: string; cp: number }[] }> {
+  return withSearchHardTimeout(runSearch(engine, fen, depth, multiPv), engine);
 }
 
 /** MultiPV: top N moves with scores (centipawns from White's perspective). */

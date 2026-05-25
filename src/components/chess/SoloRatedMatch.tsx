@@ -387,15 +387,21 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         reviewEngine,
         () => {
           if (cancelled) return;
-          void (async () => {
-            const torch = await acquireSharedTorch();
+          void acquireSharedTorch().then((torch) => {
             if (!cancelled) void runReview(reviewEngine, reviewInput, torch);
-          })();
+          });
         },
         () => {
           if (!cancelled) {
             failReview(
               "Stockfish did not start in time — refresh the page and try again."
+            );
+          }
+        },
+        () => {
+          if (!cancelled) {
+            failReview(
+              "Stockfish failed to load — refresh the page and try again."
             );
           }
         }

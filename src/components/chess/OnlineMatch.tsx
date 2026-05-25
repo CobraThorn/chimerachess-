@@ -162,15 +162,21 @@ export default function OnlineMatch({
       engine,
       () => {
         if (cancelled) return;
-        void (async () => {
-          const torch = await acquireSharedTorch();
+        void acquireSharedTorch().then((torch) => {
           if (!cancelled) void runReview(engine, reviewInput, torch);
-        })();
+        });
       },
       () => {
         if (!cancelled) {
           failReview(
             "Stockfish did not start in time — refresh the page and try again."
+          );
+        }
+      },
+      () => {
+        if (!cancelled) {
+          failReview(
+            "Stockfish failed to load — refresh the page and try again."
           );
         }
       }

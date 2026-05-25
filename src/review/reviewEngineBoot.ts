@@ -7,10 +7,16 @@ export const REVIEW_ENGINE_POLL_MS = 120;
 export function watchReviewEngineReady(
   engine: ChessEngine,
   onReady: () => void,
-  onTimeout: () => void
+  onTimeout: () => void,
+  onFailed?: () => void
 ): () => void {
   const deadline = Date.now() + REVIEW_ENGINE_BOOT_MS;
   const timer = setInterval(() => {
+    if (engine.loadFailed) {
+      clearInterval(timer);
+      onFailed?.();
+      return;
+    }
     if (engine.ready) {
       clearInterval(timer);
       onReady();

@@ -33,6 +33,8 @@ import type {
   ReviewMoveAnalysis,
   ReviewProgress,
 } from "./types";
+import { reviewDiag } from "./reviewDiagnostics";
+import { assertReplayableMoves } from "./validateReplay";
 
 const START_FEN = toFen(createInitialState());
 
@@ -86,9 +88,17 @@ export async function buildGameReview(
   input: GameReviewInput,
   onProgress?: (p: ReviewProgress) => void
 ): Promise<GameReviewReport> {
+  reviewDiag("build_start", {
+    gameId: input.id,
+    plies: input.moves.length,
+    userColor: input.userColor,
+  });
+
   if (!input.moves.length) {
     throw new Error("No moves to review");
   }
+
+  assertReplayableMoves(input.moves);
 
   engine.stop();
 
@@ -123,9 +133,11 @@ export async function buildGameReview(
       REVIEW_MOVE_DEPTH
     );
     if (!graded) {
-      console.warn(
-        `[review] Skipping ply ${ply}: engine could not grade ${m.uci}`
-      );
+      reviewDiag("build_skip", {
+        ply,
+        uci: m.uci,
+        fenBefore: fenBefore.slice(0, 40),
+      });
       continue;
     }
     const cpLoss = graded.cpLoss;
@@ -194,6 +206,16 @@ export async function buildGameReview(
     else if (u.grade === "mistake") counts.mistakes++;
     else if (u.grade === "miss") counts.misses++;
     else counts.blunders++;
+  }
+
+  if (userAnalyses.length === 0) {
+    reviewDiag("error", {
+      reason: "no_graded_user_moves",
+      expected: userMoveIndices.length,
+    });
+    throw new Error(
+      "Could not analyse your moves — the engine could not read this game. Try a new game or refresh the page."
+    );
   }
 
   const cpLosses = userAnalyses.map((u) => u.cpLoss);
@@ -279,6 +301,12 @@ export async function buildGameReview(
 
   tick("Summary…");
   const narrative = buildNarrative(base);
+
+  reviewDiag("build_done", {
+    userMoves: userAnalyses.length,
+    accuracy,
+    acpl,
+  });
 
   return { ...base, narrative };
 }
