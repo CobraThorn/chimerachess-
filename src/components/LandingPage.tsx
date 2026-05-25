@@ -2,7 +2,9 @@ import { useEffect } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { logDataEvent } from "../account/events";
 import { scheduleSync } from "../api/chimeraBackend";
+import { probeServerOpenAiCoach } from "../api/openaiKey";
 import { isLoggedIn } from "../account/storage";
+import { isLowPowerDevice } from "../utils/deviceCapability";
 import { CHIMERA_FULL_NAME } from "../content/chimera";
 import ChessBoardBackground from "./ChessBoardBackground";
 import HudOverlay from "./HudOverlay";
@@ -57,14 +59,27 @@ const FEATURE_SECTIONS = [
 ];
 
 export default function LandingPage() {
+  const lowPower = isLowPowerDevice();
+
   useEffect(() => {
     logDataEvent("session_start");
-    if (isLoggedIn()) scheduleSync(3000);
-  }, []);
+    const deferMs = lowPower ? 8000 : 3000;
+    const syncTimer = isLoggedIn()
+      ? window.setTimeout(() => scheduleSync(deferMs), deferMs)
+      : undefined;
+    const coachTimer = window.setTimeout(
+      () => void probeServerOpenAiCoach(),
+      lowPower ? 6000 : 1500
+    );
+    return () => {
+      if (syncTimer) window.clearTimeout(syncTimer);
+      window.clearTimeout(coachTimer);
+    };
+  }, [lowPower]);
 
   const { scrollYProgress } = useScroll();
-  const heroScale = useTransform(scrollYProgress, [0, 0.3], [1, 0.92]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0.4]);
+  const heroScale = useTransform(scrollYProgress, [0, 0.3], [1, lowPower ? 1 : 0.92]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.25], [1, lowPower ? 1 : 0.4]);
 
   return (
     <div className="relative min-h-screen bg-void pb-24 text-white md:pb-0">

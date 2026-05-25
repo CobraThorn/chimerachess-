@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
-import { probeServerOpenAiCoach } from "./api/openaiKey";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { ACCOUNT_EVENT } from "./account/types";
 import {
   hasCompletedChimeraSetup,
@@ -7,10 +6,13 @@ import {
   needsChimeraSetup,
 } from "./account/storage";
 import ChimeraAuthGate from "./components/auth/ChimeraAuthGate";
-import ChimeraCustomisePage from "./components/chimera/ChimeraCustomisePage";
-import LandingPage from "./components/LandingPage";
 import AppErrorBoundary from "./components/ui/AppErrorBoundary";
 import { CHIMERA_SETUP_EVENT, CHIMERA_OPEN_SETUP_EVENT } from "./chimeraSetup";
+
+const LandingPage = lazy(() => import("./components/LandingPage"));
+const ChimeraCustomisePage = lazy(
+  () => import("./components/chimera/ChimeraCustomisePage")
+);
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(isLoggedIn);
@@ -27,7 +29,6 @@ export default function App() {
 
   useEffect(() => {
     refreshGates();
-    void probeServerOpenAiCoach();
     const onAccount = () => refreshGates();
     const onSetup = () => refreshGates();
     const openSetup = () => {
@@ -50,16 +51,34 @@ export default function App() {
       {!authenticated ? (
         <ChimeraAuthGate onAuthenticated={refreshGates} />
       ) : setupRequired ? (
-        <ChimeraCustomisePage required onComplete={refreshGates} />
+        <Suspense
+          fallback={
+            <div className="flex min-h-screen items-center justify-center bg-void text-[rgba(255,255,255,0.4)]">
+              Loading…
+            </div>
+          }
+        >
+          <ChimeraCustomisePage required onComplete={refreshGates} />
+        </Suspense>
       ) : (
         <>
-          <LandingPage />
+          <Suspense
+            fallback={
+              <div className="flex min-h-screen items-center justify-center bg-void text-[rgba(255,255,255,0.4)]">
+                Loading CHIMERA…
+              </div>
+            }
+          >
+            <LandingPage />
+          </Suspense>
           {setupOptional && (
-            <ChimeraCustomisePage
-              required={false}
-              onComplete={() => setSetupOptional(false)}
-              onDismiss={() => setSetupOptional(false)}
-            />
+            <Suspense fallback={null}>
+              <ChimeraCustomisePage
+                required={false}
+                onComplete={() => setSetupOptional(false)}
+                onDismiss={() => setSetupOptional(false)}
+              />
+            </Suspense>
           )}
         </>
       )}

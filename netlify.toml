@@ -5,10 +5,10 @@
   command = "npm run build"
   publish = "dist"
 
-[build.environment]
-  VITE_CHIMERA_API_URL = "https://chimerachess-0so2.onrender.com"
+# Leave VITE_CHIMERA_API_URL unset so the app uses same-origin /api/chimera (proxy below).
+# Only set it in Netlify UI if you intentionally bypass the proxy.
 
-# Proxy API to Render (before SPA fallback). Works even if VITE_CHIMERA_API_URL is unset.
+# Proxy API to Render (before SPA fallback).
 [[redirects]]
   from = "/api/chimera/*"
   to = "https://chimerachess-0so2.onrender.com/api/chimera/:splat"

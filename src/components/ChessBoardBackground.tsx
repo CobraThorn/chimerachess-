@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isLowPowerDevice } from "../utils/deviceCapability";
 
 const BOARD_SIZE = 8;
 const PIECE_SYMBOLS = ["♔", "♕", "♖", "♗", "♘", "♙"];
@@ -11,11 +12,13 @@ interface GlowSquare {
 }
 
 export default function ChessBoardBackground() {
+  const lowPower = isLowPowerDevice();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glowsRef = useRef<GlowSquare[]>([]);
   const timeRef = useRef(0);
 
   useEffect(() => {
+    if (lowPower) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -167,7 +170,16 @@ export default function ChessBoardBackground() {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", resize);
     };
-  }, []);
+  }, [lowPower]);
+
+  if (lowPower) {
+    return (
+      <div
+        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_50%_40%,rgba(232,197,71,0.06)_0%,transparent_55%)]"
+        aria-hidden
+      />
+    );
+  }
 
   return (
     <canvas
