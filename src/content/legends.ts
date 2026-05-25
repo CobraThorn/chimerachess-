@@ -18,6 +18,12 @@ export interface LegendBanner {
   sublabel?: string;
 }
 
+export interface LegendKeyMoment {
+  title: string;
+  explanation: string;
+  teachingPoint: string;
+}
+
 export interface LegendGame {
   title: string;
   event: string;
@@ -27,6 +33,8 @@ export interface LegendGame {
   /** Color the featured legend played */
   legendColor: "w" | "b";
   highlightPly?: number;
+  /** Curated coach copy at the signature moment (ply) */
+  keyMoment?: LegendKeyMoment;
   moves: string[];
 }
 
@@ -38,6 +46,8 @@ export interface LegendProfile {
   years: string;
   country: string;
   imageUrl: string;
+  /** Public-domain / CC portrait source for attribution */
+  imageCredit: string;
   banner?: LegendBanner;
   /** Exactly four sentences */
   bio: [string, string, string, string];
@@ -65,6 +75,7 @@ export const LEGENDS: LegendProfile[] = [
     country: "United States",
     imageUrl:
       "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Hikaru_Nakamura_%28cropped%29.jpg/480px-Hikaru_Nakamura_%28cropped%29.jpg",
+    imageCredit: "Wikimedia Commons · CC BY-SA 2.0",
     bio: [
       "Hikaru Nakamura became a grandmaster at fifteen and has since defined elite blitz and bullet chess for a global audience.",
       "His intuitive tactics and fast pattern recognition make him one of the most dangerous speed players in history.",
@@ -80,6 +91,13 @@ export const LEGENDS: LegendProfile[] = [
       result: "1–0",
       legendColor: "w",
       highlightPly: 22,
+      keyMoment: {
+        title: "Nakamura uncorks the attack",
+        explanation:
+          "The position finally cracks open — pieces flood toward the enemy king and there is no time to consolidate. This is classic Hikaru: initiative first, calculation second, and the clock never gets a rest.",
+        teachingPoint:
+          "When you have the attack, prioritize checks and captures that keep the king in the center or on an open file.",
+      },
       moves: moves.hikaru,
     },
   },
@@ -92,6 +110,7 @@ export const LEGENDS: LegendProfile[] = [
     country: "Norway",
     imageUrl:
       "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Magnus_Carlsen_2014_%28cropped%29.jpg/480px-Magnus_Carlsen_2014_%28cropped%29.jpg",
+    imageCredit: "Wikimedia Commons · CC BY-SA 2.0",
     bio: [
       "Magnus Carlsen has held the world number one spot for longer than any player in the modern rating era.",
       "He converts tiny edges through endgame precision, patience, and relentless practical decision-making.",
@@ -107,6 +126,13 @@ export const LEGENDS: LegendProfile[] = [
       result: "1–0",
       legendColor: "w",
       highlightPly: 18,
+      keyMoment: {
+        title: "Carlsen tightens the squeeze",
+        explanation:
+          "Magnus improves his worst piece and trades into a structure where only he knows which ending to aim for. The eval may look equal, but the practical burden shifts entirely to the defender.",
+        teachingPoint:
+          "Winning technique often means a quiet move that restricts counterplay — not always a tactical bolt.",
+      },
       moves: moves.magnus,
     },
   },
@@ -119,6 +145,7 @@ export const LEGENDS: LegendProfile[] = [
     country: "Latvia / USSR",
     imageUrl:
       "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Mikhail_Tal_1967.jpg/480px-Mikhail_Tal_1967.jpg",
+    imageCredit: "Wikimedia Commons · public domain",
     banner: {
       kind: "memorial",
       label: "In memoriam",
@@ -150,6 +177,13 @@ export const LEGENDS: LegendProfile[] = [
       result: "1–0",
       legendColor: "w",
       highlightPly: 32,
+      keyMoment: {
+        title: "Tal's knight sacrifice — Candidates, Bled",
+        explanation:
+          "The Magician sacrifices a knight on f6, ripping open Larsen's kingside. Calculation is less about material balance than about whether every white piece joins the assault within three moves.",
+        teachingPoint:
+          "Before you sacrifice, trace every forcing reply — if you can bring two more pieces into the attack, the piece is often correct.",
+      },
       moves: moves.tal,
     },
   },
@@ -162,6 +196,7 @@ export const LEGENDS: LegendProfile[] = [
     country: "Russia",
     imageUrl:
       "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Anatoly_Karpov_1995_%28cropped%29.jpg/480px-Anatoly_Karpov_1995_%28cropped%29.jpg",
+    imageCredit: "Wikimedia Commons · CC BY-SA 3.0",
     bio: [
       "Anatoly Karpov was World Champion from 1975 to 1985 and again in the FIDE title lineage through 1993.",
       "He suffocates opponents by improving pieces quietly, trading into favorable endings, and denying counterplay.",
@@ -188,6 +223,13 @@ export const LEGENDS: LegendProfile[] = [
       result: "1–0",
       legendColor: "w",
       highlightPly: 20,
+      keyMoment: {
+        title: "Karpov's prophylactic clamp",
+        explanation:
+          "A small move that prevents counterplay — the hallmark of the Boa Constrictor. Black's active ideas are cut off before they exist, and the game drifts into a ending only Karpov wants.",
+        teachingPoint:
+          "Ask on every turn: what is my opponent's best plan, and which square can I take away one move earlier?",
+      },
       moves: moves.karpov,
     },
   },
@@ -200,6 +242,7 @@ export const LEGENDS: LegendProfile[] = [
     country: "Azerbaijan / Russia",
     imageUrl:
       "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Garry_Kasparov_%28cropped%29.jpg/480px-Garry_Kasparov_%28cropped%29.jpg",
+    imageCredit: "Wikimedia Commons · CC BY-SA 2.0",
     bio: [
       "Garry Kasparov dominated world chess from 1985 to 2000 with preparation depth and dynamic attacking play.",
       "He fused Botvinnik's scientific training with Tal's initiative, producing generations of opening theory.",
@@ -215,6 +258,13 @@ export const LEGENDS: LegendProfile[] = [
       result: "1–0",
       legendColor: "w",
       highlightPly: 48,
+      keyMoment: {
+        title: "The Immortal — king hunt in Wijk aan Zee",
+        explanation:
+          "Kasparov's king walk and rook lift create a study in domination. The engine may call it winning earlier, but here the human story is total control — every piece participates.",
+        teachingPoint:
+          "When you are winning, coordinate king and rook toward the enemy king before grabbing pawns.",
+      },
       moves: moves.kasparov,
     },
   },
@@ -227,6 +277,7 @@ export const LEGENDS: LegendProfile[] = [
     country: "United States",
     imageUrl:
       "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Daniel_Naroditsky_in_2024.jpg/480px-Daniel_Naroditsky_in_2024.jpg",
+    imageCredit: "Wikimedia Commons · CC BY-SA 4.0",
     banner: {
       kind: "memorial",
       label: "In memoriam",
@@ -258,6 +309,13 @@ export const LEGENDS: LegendProfile[] = [
       result: "1–0",
       legendColor: "w",
       highlightPly: 44,
+      keyMoment: {
+        title: "Danya defeats the world #1",
+        explanation:
+          "Naroditsky finds a forcing sequence against Nakamura — calculation, speed, and courage in one package. The crowd moment that showed a teacher could still play like a storm on the biggest stage.",
+        teachingPoint:
+          "In sharp positions, calculate to the end of the line before you touch the clock — then trust the first line you verified.",
+      },
       moves: moves.naroditsky,
     },
   },

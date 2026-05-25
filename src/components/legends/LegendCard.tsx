@@ -30,13 +30,19 @@ function LegendPortrait({
   }
 
   return (
-    <img
-      src={legend.imageUrl}
-      alt={legend.fullName}
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className="aspect-[4/5] w-full rounded-sm object-cover object-top shadow-lg ring-1 ring-[rgba(232,197,71,0.15)]"
-    />
+    <figure className="space-y-2">
+      <img
+        src={legend.imageUrl}
+        alt={legend.fullName}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className="aspect-[4/5] w-full rounded-sm object-cover object-top shadow-lg ring-1 ring-[rgba(232,197,71,0.15)]"
+      />
+      <figcaption className="font-[family-name:var(--font-hud)] text-[7px] tracking-[0.12em] text-[rgba(255,255,255,0.28)]">
+        {legend.imageCredit}
+      </figcaption>
+    </figure>
   );
 }
 
@@ -151,10 +157,7 @@ export default function LegendCard({ legend, index }: LegendCardProps) {
           </div>
 
           <div className="lg:col-span-2 xl:col-span-1">
-            <LegendGameReplayer
-              game={legend.game}
-              highlightPly={legend.game.highlightPly}
-            />
+            <LegendGameReplayer legend={legend} />
           </div>
         </div>
       </div>
