@@ -46,6 +46,7 @@ export function useMistakeGptEnrichment(
 
     return () => {
       cancelled = true;
+      setEnriching(false);
     };
   }, [report, reviewReport?.id]);
 

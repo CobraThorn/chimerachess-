@@ -31,13 +31,17 @@ export function uciToMove(state: GameState, uci: string): Move | null {
   if (from === null || to === null) return null;
 
   const legal = getLegalMoves(state, from);
-  return (
-    legal.find(
-      (m) =>
-        m.to === to &&
-        (promo ? m.promotion === promo : !m.promotion)
-    ) ??
-    legal.find((m) => m.to === to) ??
-    null
+  const exact = legal.find(
+    (m) =>
+      m.to === to && (promo ? m.promotion === promo : !m.promotion)
   );
+  if (exact) return exact;
+
+  if (!promo && uci.length === 4) {
+    const promotions = legal.filter((m) => m.to === to && m.promotion);
+    if (promotions.length === 1) return promotions[0]!;
+    return promotions.find((m) => m.promotion === "q") ?? null;
+  }
+
+  return null;
 }

@@ -14,7 +14,8 @@
     "postinstall": "node scripts/copy-stockfish.mjs && node scripts/copy-torch.mjs",
     "stockfish:copy": "node scripts/copy-stockfish.mjs",
     "wipe-data": "node scripts/wipe-chimera-data.mjs",
-    "test:calibration": "npx --yes tsx scripts/test-chimera-calibration.ts"
+    "test:calibration": "npx --yes tsx scripts/test-chimera-calibration.ts",
+    "test:chess": "npx --yes tsx scripts/test-chess-rules.ts"
   },
   "dependencies": {
     "chess.js": "^1.4.0",

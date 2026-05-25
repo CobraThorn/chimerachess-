@@ -113,6 +113,7 @@ export function useLegendLiveAnalysis(legend: LegendProfile) {
       cancelled = true;
       prefetchingNotes.current = false;
       engine.stop();
+      void engine.quit();
       engineRef.current = null;
     };
   }, [legend, steps]);

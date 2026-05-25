@@ -54,7 +54,8 @@ function BoardSquare({
     <button
       type="button"
       data-square={sq}
-      aria-disabled={!interactive}
+      disabled={!interactive}
+      tabIndex={interactive ? 0 : -1}
       onPointerDown={interactive ? onPointerDown : undefined}
       style={{ backgroundColor: bg }}
       className={[

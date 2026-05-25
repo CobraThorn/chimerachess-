@@ -25,7 +25,7 @@ export function stateAtPly(
   return {
     state,
     lastMove,
-    fen: capped > 0 ? moves[capped - 1].fen : toFen(createInitialState()),
+    fen: toFen(state),
   };
 }
 

@@ -86,9 +86,25 @@ function adminSecretOk(req) {
   return typeof header === "string" && header === expected;
 }
 
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+function sanitizeStorageId(id, label = "id") {
+  if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{8,128}$/.test(id)) {
+    throw new Error(`Invalid ${label}`);
+  }
+  return id;
+}
+
 async function readBody(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      throw new Error("Request body too large");
+    }
+    chunks.push(chunk);
+  }
   const text = Buffer.concat(chunks).toString("utf8");
   if (!text) return {};
   return JSON.parse(text);
@@ -108,6 +124,7 @@ async function saveAccount(account) {
   if (!account?.id || !account?.email) {
     throw new Error("account.id and account.email required");
   }
+  sanitizeStorageId(account.id, "account.id");
   const file = path.join(ACCOUNTS_DIR, `${account.id}.json`);
   let existing = null;
   try {
@@ -207,6 +224,7 @@ function publicAccountPayload(record) {
 
 async function loadUserBackup(accountId) {
   if (!accountId) return null;
+  sanitizeStorageId(accountId, "accountId");
   const file = path.join(BACKUPS_DIR, `${accountId}.json`);
   try {
     return JSON.parse(await fs.readFile(file, "utf8"));
@@ -219,6 +237,7 @@ async function saveUserBackup(accountId, save) {
   if (!accountId || !save) {
     throw new Error("accountId and save required");
   }
+  sanitizeStorageId(accountId, "accountId");
   const file = path.join(BACKUPS_DIR, `${accountId}.json`);
   await fs.writeFile(
     file,
@@ -342,6 +361,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const userId = account?.id ?? body.userId;
+      if (userId) sanitizeStorageId(userId, "userId");
       const eventResult = userId
         ? await appendEvents(userId, events)
         : { appended: 0 };

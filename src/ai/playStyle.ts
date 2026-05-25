@@ -92,7 +92,7 @@ export function updateStyleFromMove(
     next.checks += 1;
   }
 
-  const pieceCount = after.board.filter(Boolean).length;
+  const pieceCount = after?.board.filter(Boolean).length ?? before.board.filter(Boolean).length;
   if (pieceCount <= 12) next.endgameMoves += 1;
 
   if (cpLoss !== undefined) {

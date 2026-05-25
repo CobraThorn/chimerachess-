@@ -16,17 +16,22 @@ export function cpForWhite(fen: string, stmCp: number): number {
   return stm === "w" ? stmCp : -stmCp;
 }
 
+function mateStmCp(mateIn: number): number {
+  return mateIn > 0 ? 100000 - mateIn : -100000 - mateIn;
+}
+
 export function evalFromResult(fen: string, evalResult: EvalResult): {
   cpWhite: number;
   isMate: boolean;
   mateIn?: number;
 } {
   if (evalResult.isMate && evalResult.mateIn !== undefined) {
-    const cpWhite =
-      evalResult.mateIn > 0
-        ? 100000 - evalResult.mateIn
-        : -100000 - evalResult.mateIn;
-    return { cpWhite, isMate: true, mateIn: evalResult.mateIn };
+    const stmCp = mateStmCp(evalResult.mateIn);
+    return {
+      cpWhite: cpForWhite(fen, stmCp),
+      isMate: true,
+      mateIn: evalResult.mateIn,
+    };
   }
   return { cpWhite: cpForWhite(fen, evalResult.cp), isMate: false };
 }

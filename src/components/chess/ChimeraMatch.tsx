@@ -97,6 +97,7 @@ export default function ChimeraMatch() {
   } | null>(null);
   const [sfReady, setSfReady] = useState(false);
   const [chimeraThinking, setChimeraThinking] = useState(false);
+  const [chimeraStuck, setChimeraStuck] = useState(false);
   const [gameOver, setGameOver] = useState<string | null>(null);
   const [reviewInput, setReviewInput] = useState<GameReviewInput | null>(null);
   const {
@@ -177,6 +178,7 @@ export default function ChimeraMatch() {
   const startNewGame = useCallback(() => {
     chimeraTurnLockRef.current = false;
     setChimeraThinking(false);
+    setChimeraStuck(false);
     pendingMistakeAnalysesRef.current = 0;
 
     const init = createInitialState();
@@ -382,7 +384,11 @@ export default function ChimeraMatch() {
           uci = pickFallbackUci(current);
           move = uci ? resolveBotMove(current, uci) : null;
         }
-        if (!move) return;
+        if (!move) {
+          setChimeraStuck(true);
+          return;
+        }
+        setChimeraStuck(false);
 
         await waitAtLeast(thinkStart, CHIMERA_MIN_THINK_MS);
 
@@ -429,12 +435,13 @@ export default function ChimeraMatch() {
 
   /** Whenever it is CHIMERA's turn, play one move (recovers from engine stalls). */
   useEffect(() => {
-    if (!sfReady || gameOver || chimeraThinking || chimeraTurnLockRef.current) return;
+    if (!sfReady || gameOver || chimeraStuck || chimeraThinking || chimeraTurnLockRef.current) return;
     if (state.turn !== chimeraColor) return;
     void runChimeraTurn(state);
   }, [
     sfReady,
     gameOver,
+    chimeraStuck,
     chimeraThinking,
     chimeraColor,
     state.turn,
@@ -591,6 +598,7 @@ export default function ChimeraMatch() {
 
   const statusLabel = (() => {
     if (gameOver) return gameOver;
+    if (chimeraStuck) return "CHIMERA could not move — start a new game";
     if (chimeraThinking) return "CHIMERA is thinking…";
     switch (status.type) {
       case "check":

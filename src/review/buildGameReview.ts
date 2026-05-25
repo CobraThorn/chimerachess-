@@ -122,20 +122,26 @@ export async function buildGameReview(
       input.userColor,
       REVIEW_MOVE_DEPTH
     );
-    const cpLoss = graded?.cpLoss ?? 0;
-    const playedBest = graded?.playedBest ?? false;
-    const userEvalBefore = graded?.userEvalBeforeCp ?? 0;
+    if (!graded) {
+      console.warn(
+        `[review] Skipping ply ${ply}: engine could not grade ${m.uci}`
+      );
+      continue;
+    }
+    const cpLoss = graded.cpLoss;
+    const playedBest = graded.playedBest;
+    const userEvalBefore = graded.userEvalBeforeCp;
     const grade = classifyMoveGrade({
       cpLoss,
       playedBest,
-      brilliantCandidate: graded?.brilliantCandidate ?? false,
+      brilliantCandidate: graded.brilliantCandidate ?? false,
       ply,
       userEvalBeforeCp: userEvalBefore,
     });
-    const beforeW = graded?.evalBeforeCpWhite ?? 0;
-    const afterW = graded?.evalAfterCpWhite ?? 0;
+    const beforeW = graded.evalBeforeCpWhite;
+    const afterW = graded.evalAfterCpWhite;
     const accuracyPct = cpLossToAccuracy(cpLoss);
-    const bestUci = graded?.bestUci ?? m.uci;
+    const bestUci = graded.bestUci;
 
     const position = analyzePositionForReview(
       stateBefore,
@@ -159,7 +165,7 @@ export async function buildGameReview(
       evalBeforeWhite: beforeW,
       evalAfterWhite: afterW,
       swingCp: cpLoss,
-      category: (graded?.category ?? null) as MistakeCategory | null,
+      category: (graded.category ?? null) as MistakeCategory | null,
       isCritical: cpLoss >= CP_MISTAKE,
       insight: insightForGrade(grade, cpLoss, bestUci, m.uci, m.san),
       position,

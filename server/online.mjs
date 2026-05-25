@@ -76,6 +76,7 @@ function endGame(game, result, reason) {
   game.status = "ended";
   game.result = result;
   game.endReason = reason;
+  game.drawOfferedBy = null;
   const payload = {
     type: "game_over",
     gameId: game.id,
@@ -133,6 +134,7 @@ function pairPlayers(tcId, a, b) {
     status: "active",
     result: null,
     endReason: null,
+    drawOfferedBy: null,
     turnStartedAt: Date.now(),
     clock: { w: tc.initialMs, b: tc.initialMs },
     white: { playerId: white.playerId, name: white.name, ws: white.ws },
@@ -330,6 +332,8 @@ function handleDrawOffer(ws) {
   if (!client?.gameId) return;
   const game = games.get(client.gameId);
   if (!game || game.status !== "active") return;
+  const color = game.white.ws === ws ? "w" : "b";
+  game.drawOfferedBy = color;
   const other = game.white.ws === ws ? game.black.ws : game.white.ws;
   send(other, { type: "draw_offered", gameId: game.id });
 }
@@ -339,6 +343,11 @@ function handleDrawAccept(ws) {
   if (!client?.gameId) return;
   const game = games.get(client.gameId);
   if (!game || game.status !== "active") return;
+  const color = game.white.ws === ws ? "w" : "b";
+  if (!game.drawOfferedBy || game.drawOfferedBy === color) {
+    send(ws, { type: "error", message: "No draw offer to accept" });
+    return;
+  }
   endGame(game, "draw", "draw");
 }
 

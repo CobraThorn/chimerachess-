@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { NavDropdownItem, NavItem } from "../../content/nav";
 
 interface NavDropdownProps {
@@ -18,6 +18,12 @@ export default function NavDropdown({ item }: NavDropdownProps) {
   const handleLeave = () => {
     timeoutRef.current = setTimeout(() => setOpen(false), 120);
   };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   if (!item.dropdown) {
     return (

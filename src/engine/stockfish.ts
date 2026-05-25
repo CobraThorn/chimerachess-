@@ -21,7 +21,7 @@ export function getBestMove(
   fen: string,
   depth = 12
 ): Promise<string> {
-  return new Promise((resolve) => {
+  const search = new Promise<string>((resolve) => {
     engine.stop();
     engine.send(`position fen ${fen}`);
     engine.send(`go depth ${depth}`, (out) => {
@@ -30,6 +30,7 @@ export function getBestMove(
       resolve(move === "(none)" ? "" : move);
     });
   });
+  return withSearchHardTimeout(search, engine).catch(() => "");
 }
 
 /** Fast reply for live play — caps think time (ms) with a hard timeout so the queue cannot hang. */
@@ -201,16 +202,21 @@ export function searchPosition(
   const search = new Promise<{
     eval: EvalResult;
     topMoves: { move: string; cp: number }[];
-  }>((resolve) => {
+  }>((resolve, reject) => {
     engine.stop();
     engine.send(`setoption name MultiPV value ${multiPv}`);
     engine.send(`position fen ${fen}`);
     engine.send(`go depth ${depth}`, (out) => {
-      engine.send(`setoption name MultiPV value 1`);
-      resolve({
-        eval: parseEvalFromOutput(out),
-        topMoves: parseTopMovesFromOutput(out, fen, multiPv),
-      });
+      try {
+        resolve({
+          eval: parseEvalFromOutput(out),
+          topMoves: parseTopMovesFromOutput(out, fen, multiPv),
+        });
+      } catch (err) {
+        reject(err);
+      } finally {
+        engine.send(`setoption name MultiPV value 1`);
+      }
     });
   });
   return withSearchHardTimeout(search, engine);

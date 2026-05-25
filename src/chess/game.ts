@@ -32,10 +32,10 @@ function passesThroughCheck(
   return false;
 }
 
-export function applyMove(state: GameState, move: Move): GameState {
+export function applyMove(state: GameState, move: Move): GameState | null {
   const next = cloneState(state);
   const piece = getPiece(next, move.from);
-  if (!piece) return next;
+  if (!piece) return null;
 
   const captured = getPiece(next, move.to);
   const flags = move.flags ?? [];
@@ -88,6 +88,13 @@ export function applyMove(state: GameState, move: Move): GameState {
     if (move.from === rookQueenside("b") || move.to === rookQueenside("b")) next.castling.bQ = false;
   }
 
+  if (captured?.type === "r") {
+    if (move.to === rookKingside("w")) next.castling.wK = false;
+    if (move.to === rookQueenside("w")) next.castling.wQ = false;
+    if (move.to === rookKingside("b")) next.castling.bK = false;
+    if (move.to === rookQueenside("b")) next.castling.bQ = false;
+  }
+
   if (captured || piece.type === "p") {
     next.halfmoveClock = 0;
   } else {
@@ -114,6 +121,7 @@ export function isLegalMove(state: GameState, move: Move): boolean {
   }
 
   const trial = applyMove(state, match);
+  if (!trial) return false;
   return !isInCheck(trial, state.turn);
 }
 
