@@ -1,5 +1,10 @@
-/** Chess.com-style pacing for CHIMERA replies */
-export const CHIMERA_MIN_THINK_MS = 420;
+/** Max Stockfish movetime for CHIMERA replies (arena, solo, mirror). */
+export const CHIMERA_MAX_THINK_MS = 4_000;
+/** Wall-clock cap for one CHIMERA search (movetime + UCI overhead). */
+export const CHIMERA_SEARCH_HARD_CAP_MS = 5_500;
+
+/** Minimum visible “thinking” time after the engine returns (capped under max think). */
+export const CHIMERA_MIN_THINK_MS = 280;
 /** Match board piece glide duration in ChessBoardGrid. */
 export const MOVE_SLIDE_MS = 180;
 

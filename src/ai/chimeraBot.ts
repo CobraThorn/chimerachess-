@@ -1,20 +1,18 @@
 import type { GameState } from "../chess";
 import { getAllLegalMoves } from "../chess";
+import {
+  CHIMERA_MAX_THINK_MS,
+  CHIMERA_SEARCH_HARD_CAP_MS,
+} from "../chess/movePacing";
 import { toFen } from "../chess/fen";
 import { moveToUci, uciToMove } from "../chess/uci";
-import { runWithSharedTorch } from "../engine/enginePool";
 import type { StockfishEngine } from "../engine/stockfish";
-import {
-  configureEngine,
-  getBestMove,
-  getBestMoveTimed,
-} from "../engine/stockfish";
+import { configureEngine, getBestMoveTimed } from "../engine/stockfish";
 import { archetypePlayBias } from "./cognition/archetypePlay";
 import type { CognitiveIdentity } from "./cognition/identity";
 import { getChimeraBookMove } from "./chimeraOpeningBook";
 import {
   blunderRateForStrength,
-  chimeraSearchDepth,
   chimeraThinkTimeMs,
   effectiveChimeraElo,
   useFullEngineStrength,
@@ -23,7 +21,6 @@ import {
   counterStyleLabel,
   learningIsActive,
   learningPlayBias,
-  pickLearnedMove,
 } from "./learning/apply";
 import { ensureLearning } from "./learning/learn";
 import { phenotypeDisplayName } from "./learning/phenotype";
@@ -31,6 +28,7 @@ import { positionKey } from "./memory";
 import type { ChimeraMemory } from "./types";
 
 const configuredEloByEngine = new WeakMap<StockfishEngine, number>();
+const CONFIGURE_ENGINE_TIMEOUT_MS = 2_500;
 
 function pickRandom<T>(arr: T[]): T | null {
   if (!arr.length) return null;
@@ -40,29 +38,8 @@ function pickRandom<T>(arr: T[]): T | null {
 export interface ChimeraMoveOptions {
   mirror?: boolean;
   archetype?: CognitiveIdentity;
-}
-
-async function preferTorchLineWhenStrong(
-  state: GameState,
-  fen: string,
-  stockfishUci: string,
-  targetElo: number,
-  depth: number
-): Promise<string> {
-  if (!stockfishUci || targetElo < 2400) return stockfishUci;
-
-  const torchUci = await Promise.race([
-    runWithSharedTorch((torch) =>
-      getBestMove(torch, fen, Math.min(18, depth + 1))
-    ),
-    new Promise<string | null>((resolve) => {
-      window.setTimeout(() => resolve(null), 6_000);
-    }),
-  ]);
-
-  if (!torchUci || torchUci === stockfishUci) return stockfishUci;
-  if (!uciToMove(state, torchUci)) return stockfishUci;
-  return torchUci;
+  /** Arena / solo: timed search only (never depth or MultiPV learned pick). */
+  livePlay?: boolean;
 }
 
 export async function getChimeraMove(
@@ -135,59 +112,38 @@ export async function getChimeraMove(
   const engineKey = mirror ? -targetElo : targetElo;
   if (configuredEloByEngine.get(engine) !== engineKey) {
     if (useFullEngineStrength(targetElo)) {
-      await configureEngine(engine, {
-        limitStrength: false,
-        skillLevel: 20,
-      });
+      await configureEngine(
+        engine,
+        { limitStrength: false, skillLevel: 20 },
+        CONFIGURE_ENGINE_TIMEOUT_MS
+      );
     } else {
       const skillLevel = Math.min(
         20,
         Math.max(0, Math.floor((targetElo - 1320) / 60))
       );
-      await configureEngine(engine, {
-        limitStrength: true,
-        elo: targetElo,
-        skillLevel,
-      });
+      await configureEngine(
+        engine,
+        { limitStrength: true, elo: targetElo, skillLevel },
+        CONFIGURE_ENGINE_TIMEOUT_MS
+      );
     }
     configuredEloByEngine.set(engine, engineKey);
   }
 
-  const baseDepth = chimeraSearchDepth(
-    targetElo,
-    Math.min(16, 8 + Math.floor(targetElo / 200))
+  const timeMult = learnBias?.thinkTimeMult ?? 1;
+  const thinkMs = Math.min(
+    CHIMERA_MAX_THINK_MS,
+    chimeraThinkTimeMs(targetElo, mirror, timeMult)
   );
 
-  if (!mirror && learningIsActive(memory)) {
-    const learned = await pickLearnedMove(engine, state, memory, baseDepth);
-    if (learned) return learned;
-  }
-
-  const timeMult = learnBias?.thinkTimeMult ?? 1;
-
-  if (targetElo >= 2200) {
-    const depth = chimeraSearchDepth(targetElo, baseDepth);
-    const best = await getBestMove(engine, fen, depth);
-    if (best) {
-      return preferTorchLineWhenStrong(state, fen, best, targetElo, depth);
-    }
-  } else {
-    const best = await getBestMoveTimed(
-      engine,
-      fen,
-      chimeraThinkTimeMs(targetElo, mirror, timeMult),
-      chimeraThinkTimeMs(targetElo, mirror, timeMult) + 12_000
-    );
-    if (best) {
-      return preferTorchLineWhenStrong(
-        state,
-        fen,
-        best,
-        targetElo,
-        baseDepth
-      );
-    }
-  }
+  const best = await getBestMoveTimed(
+    engine,
+    fen,
+    thinkMs,
+    CHIMERA_SEARCH_HARD_CAP_MS
+  );
+  if (best) return best;
 
   const fallback = pickRandom(legal);
   return fallback ? moveToUci(fallback) : null;

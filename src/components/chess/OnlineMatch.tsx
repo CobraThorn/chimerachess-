@@ -20,6 +20,10 @@ import ChessPiece from "./ChessPiece";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
 import { finishGame, loadMemory, saveMemory } from "../../ai";
+import {
+  gradeStoredGameMistakes,
+  waitForEngineReady,
+} from "../../ai/mistakeAnalyzer";
 import { ensureCrsState } from "../../crs/profile";
 import { CHIMERA_MEMORY_EVENT, type ChimeraMemory, type StoredGame } from "../../ai/types";
 import { onlineMovesToRecords } from "../../review/buildGameReview";
@@ -119,80 +123,104 @@ export default function OnlineMatch({
     if (history.length < 1) return;
     reviewStartedRef.current = true;
 
-    const result = onlineResultToReview(client.result, userColor);
-    const moveRecords = onlineMovesToRecords(history);
-    const stored: StoredGame = {
-      id: match.gameId,
-      startedAt: match.startedAt,
-      endedAt: Date.now(),
-      userColor,
-      moves: moveRecords,
-      mistakes: [],
-      result,
-      openingLine: history
-        .slice(0, 6)
-        .map((m) => m.san ?? m.uci)
-        .join(" "),
-    };
-
-    const mem = loadMemory();
-    const mode = tcToCrsMode(match.tc);
-    const crs = ensureCrsState(mem);
-    const opponentRating = crs.modeRatings[mode] ?? crs.chimeraRating;
-    const next = finishGame(mem, stored, { mode, opponentRating });
-    saveMemory(next);
-    setMemory(next);
-    setStoredGame(stored);
-    if (next.crs?.lastPostGame) {
-      setCrsPostGame(next.crs.lastPostGame);
-    }
-
-    const reviewInput = {
-      id: match.gameId,
-      mode: "online" as const,
-      opponentLabel: match.opponent.name,
-      userColor,
-      result: onlineResultToReview(client.result, userColor),
-      startedAt: match.startedAt,
-      endedAt: Date.now(),
-      moves: moveRecords,
-    };
-
-    const engine = createStockfishEngine();
-    reviewEngineRef.current = engine;
     let cancelled = false;
+    let stopWatch: (() => void) | null = null;
+    let reviewEngine: StockfishEngine | null = null;
 
-    const stopWatch = watchReviewEngineReady(
-      engine,
-      () => {
-        if (cancelled) return;
-        if (!cancelled) void runReview(engine, reviewInput);
-      },
-      () => {
-        if (!cancelled) {
-          failReview(
-            "Stockfish did not start in time — refresh the page and try again."
+    void (async () => {
+      const result = onlineResultToReview(client.result, userColor);
+      const moveRecords = onlineMovesToRecords(history);
+
+      const mistakeEngine = createStockfishEngine();
+      let mistakes: StoredGame["mistakes"] = [];
+      try {
+        if (await waitForEngineReady(mistakeEngine, 12_000)) {
+          mistakes = await gradeStoredGameMistakes(
+            mistakeEngine,
+            moveRecords,
+            userColor,
+            4
           );
         }
-      },
-      () => {
-        if (!cancelled) {
-          failReview(
-            "Stockfish failed to load — refresh the page and try again."
-          );
-        }
+      } finally {
+        mistakeEngine.stop();
+        mistakeEngine.quit();
       }
-    );
+
+      if (cancelled) return;
+
+      const stored: StoredGame = {
+        id: match.gameId,
+        startedAt: match.startedAt,
+        endedAt: Date.now(),
+        userColor,
+        moves: moveRecords,
+        mistakes,
+        result,
+        openingLine: history
+          .slice(0, 6)
+          .map((m) => m.san ?? m.uci)
+          .join(" "),
+      };
+
+      const mem = loadMemory();
+      const mode = tcToCrsMode(match.tc);
+      const crs = ensureCrsState(mem);
+      const opponentRating = crs.modeRatings[mode] ?? crs.chimeraRating;
+      const next = finishGame(mem, stored, { mode, opponentRating });
+      saveMemory(next);
+      setMemory(next);
+      setStoredGame(stored);
+      if (next.crs?.lastPostGame) {
+        setCrsPostGame(next.crs.lastPostGame);
+      }
+
+      const reviewInput = {
+        id: match.gameId,
+        mode: "online" as const,
+        opponentLabel: match.opponent.name,
+        userColor,
+        result,
+        startedAt: match.startedAt,
+        endedAt: Date.now(),
+        moves: moveRecords,
+      };
+
+      reviewEngine = createStockfishEngine();
+      reviewEngineRef.current = reviewEngine;
+
+      stopWatch = watchReviewEngineReady(
+        reviewEngine,
+        () => {
+          if (cancelled) return;
+          void runReview(reviewEngine!, reviewInput);
+        },
+        () => {
+          if (!cancelled) {
+            failReview(
+              "Stockfish did not start in time — refresh the page and try again."
+            );
+          }
+        },
+        () => {
+          if (!cancelled) {
+            failReview(
+              "Stockfish failed to load — refresh the page and try again."
+            );
+          }
+        }
+      );
+    })();
 
     return () => {
       cancelled = true;
-      stopWatch();
       abortReview();
-      if (reviewEngineRef.current === engine) {
-        engine.stop();
-        engine.quit();
-        reviewEngineRef.current = null;
+      stopWatch?.();
+      if (reviewEngine) {
+        reviewEngine.stop();
+        reviewEngine.quit();
       }
+      reviewEngineRef.current = null;
     };
   }, [
     client.phase,
@@ -245,6 +273,7 @@ export default function OnlineMatch({
   const canPlay =
     client.connected &&
     client.phase === "playing" &&
+    !client.terminalPending &&
     !client.error;
 
   const applyLocalMove = useCallback(

@@ -299,9 +299,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+  const pathname = url.pathname.replace(/\/+$/, "") || "/";
 
   try {
-    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "")) {
+    if (req.method === "GET" && (pathname === "/" || pathname === "")) {
       send(req, res, 200, {
         ok: true,
         service: "chimera-data-api",
@@ -312,7 +313,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "GET" && url.pathname === "/api/chimera/health") {
+    if (req.method === "GET" && pathname === "/api/chimera/health") {
       await ensureDirs();
       const stats = await getStats();
       send(req, res, 200, {
@@ -328,7 +329,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/chimera/register") {
+    if (req.method === "POST" && pathname === "/api/chimera/register") {
       await ensureDirs();
       const body = await readBody(req);
       const account = body.account;
@@ -379,7 +380,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/chimera/login") {
+    if (req.method === "POST" && pathname === "/api/chimera/login") {
       await ensureDirs();
       const body = await readBody(req);
       const email = normalizeEmail(body.email);
@@ -421,7 +422,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "GET" && url.pathname === "/api/chimera/backup") {
+    if (req.method === "GET" && pathname === "/api/chimera/backup") {
       await ensureDirs();
       const accountId = url.searchParams.get("accountId");
       if (!accountId) {
@@ -434,7 +435,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/chimera/backup") {
+    if (req.method === "POST" && pathname === "/api/chimera/backup") {
       await ensureDirs();
       const body = await readBody(req);
       const accountId = body.accountId;
@@ -445,25 +446,17 @@ const server = http.createServer(async (req, res) => {
       }
       await requireSessionForAccount(DATA_DIR, accountId, req);
       await saveUserBackup(accountId, save);
-      if (body.account) {
+      if (body.account?.id === accountId) {
         await saveAccount({
           ...body.account,
           chimeraSetupComplete: true,
         });
-      } else {
-        const existing = await findAccountByEmail(body.email ?? "");
-        if (existing) {
-          await saveAccount({
-            ...existing,
-            chimeraSetupComplete: true,
-          });
-        }
       }
       send(req, res, 200, { ok: true, savedAt: Date.now() });
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/chimera/openai/chat") {
+    if (req.method === "POST" && pathname === "/api/chimera/openai/chat") {
       await requireSession(DATA_DIR, req);
       const body = await readBody(req);
       const payload = sanitizeChatBody(body);
@@ -472,7 +465,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/chimera/admin/wipe-all") {
+    if (req.method === "POST" && pathname === "/api/chimera/admin/wipe-all") {
       if (!adminSecretOk(req)) {
         send(req, res, 403, { ok: false, error: "Forbidden" });
         return;
@@ -482,7 +475,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/chimera/sync") {
+    if (req.method === "POST" && pathname === "/api/chimera/sync") {
       await ensureDirs();
       const session = await requireSession(DATA_DIR, req);
       const body = await readBody(req);

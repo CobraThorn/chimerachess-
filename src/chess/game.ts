@@ -157,6 +157,20 @@ function insufficientMaterial(state: GameState): boolean {
   return false;
 }
 
+/** True only for finished games (not plain check). */
+export function isGameOverStatus(
+  st: GameStatus
+): st is
+  | { type: "checkmate"; winner: Color }
+  | { type: "stalemate" }
+  | { type: "draw"; reason: "fifty-move" | "insufficient-material" } {
+  return (
+    st.type === "checkmate" ||
+    st.type === "stalemate" ||
+    st.type === "draw"
+  );
+}
+
 export function getGameStatus(state: GameState): GameStatus {
   const legal = getAllLegalMoves(state);
   const inCheck = isInCheck(state, state.turn);

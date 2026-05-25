@@ -1,4 +1,4 @@
-/** Shared UCI worker interface (Stockfish, Torch 4, …). */
+/** Shared UCI worker interface (Stockfish WASM). */
 export type EngineCallback = (line: string) => void;
 
 export interface ChessEngine {
@@ -12,7 +12,7 @@ export interface ChessEngine {
   readonly loadFailed: boolean;
 }
 
-export type AnalysisEngineId = "stockfish" | "torch";
+export type AnalysisEngineId = "stockfish";
 
 export interface EngineDescriptor {
   id: AnalysisEngineId;

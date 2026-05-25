@@ -122,7 +122,7 @@ export interface GameReviewReport {
   analysisDepth: number;
   analysisMultipv: number;
   /** Engines that contributed to this review */
-  analysisEngines?: ("stockfish" | "torch")[];
+  analysisEngines?: ("stockfish")[];
   torchUsed?: boolean;
   openingLine: string;
   phases: GamePhaseStats[];

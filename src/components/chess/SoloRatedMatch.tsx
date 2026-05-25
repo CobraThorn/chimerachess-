@@ -31,7 +31,11 @@ import {
   uciToMove,
 } from "../../chess";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
-import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
+import {
+  CHIMERA_MIN_THINK_MS,
+  CHIMERA_SEARCH_HARD_CAP_MS,
+  waitAtLeast,
+} from "../../chess/movePacing";
 import { useCustomisation } from "../../customisation";
 import {
   clearCrsPostGame,
@@ -138,6 +142,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   );
 
   const engineRef = useRef<StockfishEngine | null>(null);
+  const mistakeEngineRef = useRef<StockfishEngine | null>(null);
   const gameRef = useRef<{
     id: string;
     startedAt: number;
@@ -147,7 +152,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   } | null>(null);
   const endedRef = useRef(false);
   const botTurnLockRef = useRef(false);
-  const SOLO_BOT_MOVE_TIMEOUT_MS = 28_000;
+  const SOLO_BOT_MOVE_TIMEOUT_MS = CHIMERA_SEARCH_HARD_CAP_MS + 2_000;
   const reviewStartedRef = useRef(false);
   const pendingMistakeAnalysesRef = useRef(0);
   const playedChimeraEloRef = useRef(0);
@@ -223,7 +228,9 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     reviewStartedRef.current = false;
 
     const engine = createStockfishEngine();
+    const mistakeEngine = createStockfishEngine();
     engineRef.current = engine;
+    mistakeEngineRef.current = mistakeEngine;
     const t = setInterval(() => {
       if (engine.ready) {
         setSfReady(true);
@@ -233,7 +240,9 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     return () => {
       clearInterval(t);
       engine.quit();
+      mistakeEngine.quit();
       engineRef.current = null;
+      mistakeEngineRef.current = null;
     };
   }, [tc]);
 
@@ -267,7 +276,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
             engine.stop();
             resolve(null);
           }, SOLO_BOT_MOVE_TIMEOUT_MS);
-          void getChimeraMove(engine, current, botColor, mem)
+          void getChimeraMove(engine, current, botColor, mem, { livePlay: true })
             .then((result) => {
               window.clearTimeout(timer);
               resolve(result);
@@ -479,13 +488,20 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         finish("draw", st.type);
       }
 
-      const engine = engineRef.current;
-      if (engine?.ready) {
+      const analysisEngine = mistakeEngineRef.current;
+      if (analysisEngine?.ready) {
         const uci = moveToUci(move);
         const fenAfter = toFen(next);
         const before = state;
         pendingMistakeAnalysesRef.current += 1;
-        void analyzeUserMove(engine, fenBefore, fenAfter, uci, userColor, 4)
+        void analyzeUserMove(
+          analysisEngine,
+          fenBefore,
+          fenAfter,
+          uci,
+          userColor,
+          4
+        )
           .then((mistake) => {
             if (mistake && gameRef.current) {
               gameRef.current.mistakes.push(mistake);

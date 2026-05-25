@@ -8,7 +8,8 @@ import {
 } from "../review/classifyMove";
 import type { StockfishEngine } from "../engine/stockfish";
 import { getEvaluation, searchPosition } from "../engine/stockfish";
-import type { MistakeCategory, MistakeRecord } from "./types";
+import { stateAtPly } from "../review/replay";
+import type { GameMoveRecord, MistakeCategory, MistakeRecord } from "./types";
 
 /** Engine-best or within this many cp of the best line (Chess.com-style). */
 const NEAR_BEST_CP = 10;
@@ -205,4 +206,42 @@ export async function waitForPendingMistakeAnalyses(
   while (getPendingCount() > 0 && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, pollMs));
   }
+}
+
+/** Shallow post-game pass for CRS / storage when live grading was skipped (e.g. online). */
+export async function gradeStoredGameMistakes(
+  engine: StockfishEngine,
+  moves: GameMoveRecord[],
+  userColor: Color,
+  depth = 4
+): Promise<MistakeRecord[]> {
+  const mistakes: MistakeRecord[] = [];
+  for (let i = 0; i < moves.length; i++) {
+    const m = moves[i];
+    if (m.by !== "user") continue;
+    const { fen: fenBefore } = stateAtPly(moves, i);
+    const mistake = await analyzeUserMove(
+      engine,
+      fenBefore,
+      m.fen,
+      m.uci,
+      userColor,
+      depth
+    );
+    if (mistake) mistakes.push(mistake);
+  }
+  return mistakes;
+}
+
+export async function waitForEngineReady(
+  engine: StockfishEngine,
+  maxWaitMs = 15_000
+): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    if (engine.loadFailed) return false;
+    if (engine.ready) return true;
+    await new Promise((r) => setTimeout(r, 80));
+  }
+  return engine.ready;
 }

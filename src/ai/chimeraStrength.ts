@@ -1,3 +1,4 @@
+import { CHIMERA_MAX_THINK_MS } from "../chess/movePacing";
 import { ensureCrsState } from "../crs/profile";
 import { ensureChimeraCalibration } from "./chimeraCalibration";
 import { clampElo } from "./elo";
@@ -116,7 +117,7 @@ export function chimeraThinkTimeMs(
   else if (targetElo >= 1000) base = 280;
   else base = Math.min(360, Math.max(150, 110 + Math.floor(targetElo / 8)));
 
-  return Math.round(base * mult);
+  return Math.min(CHIMERA_MAX_THINK_MS, Math.round(base * mult));
 }
 
 export function chimeraSearchDepth(targetElo: number, baseDepth: number): number {

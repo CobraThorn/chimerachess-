@@ -17,14 +17,8 @@ import {
   runFullAnalysis,
   type LiveAnalysis,
 } from "../../engine/analysis";
-import { fetchTorchMeta, torchDisplayName } from "../../engine/torchMeta";
 import { STOCKFISH_VERSION } from "../../engine/stockfish";
-import { getTopMoves } from "../../engine/stockfish";
-import {
-  engineForMode,
-  useAnalysisEngines,
-  type AnalysisEngineMode,
-} from "../../hooks/useAnalysisEngines";
+import { useAnalysisEngines } from "../../hooks/useAnalysisEngines";
 import EvalBar from "./EvalBar";
 import ChessBoardGrid from "../chess/ChessBoardGrid";
 import ChessPiece from "../chess/ChessPiece";
@@ -55,22 +49,11 @@ export default function StockfishAnalysis() {
   const [orientation, setOrientation] = useState<Color>("w");
   const [analysisOn, setAnalysisOn] = useState(true);
   const [depthPreset, setDepthPreset] = useState(0);
-  const [engineMode, setEngineMode] = useState<AnalysisEngineMode>("stockfish");
   const [thinking, setThinking] = useState(false);
   const [live, setLive] = useState<LiveAnalysis | null>(null);
   const [topMoves, setTopMoves] = useState<{ move: string; cp: number }[]>([]);
-  const [torchLine, setTorchLine] = useState<{ move: string; cp: number } | null>(
-    null
-  );
-  const [torchLabel, setTorchLabel] = useState("Torch 4");
 
-  const {
-    stockfish,
-    sfReady,
-    engineError,
-    hasTorch,
-    ensureTorch,
-  } = useAnalysisEngines();
+  const { stockfish, sfReady, engineError } = useAnalysisEngines();
 
   const engineRef = useRef(stockfish);
   engineRef.current = stockfish;
@@ -90,21 +73,8 @@ export default function StockfishAnalysis() {
     status.type === "stalemate" ||
     status.type === "draw";
 
-  useEffect(() => {
-    void fetchTorchMeta().then((m) => setTorchLabel(torchDisplayName(m)));
-  }, []);
-
   const runEngine = useCallback(async () => {
-    const torchEng = await ensureTorch();
-    let engine = engineForMode(engineMode, stockfish, torchEng);
-    if (engineMode === "dual") {
-      engine = stockfish;
-    }
-    if (engineMode === "torch" && !torchEng?.ready) {
-      setThinking(false);
-      setTorchLine(null);
-      return;
-    }
+    const engine = stockfish;
     if (!engine?.ready || !analysisOn || gameOver) {
       setThinking(false);
       if (gameOver) {
@@ -143,38 +113,12 @@ export default function StockfishAnalysis() {
           }))
         );
       }
-
-      if (engineMode === "dual" && hasTorch) {
-        const torch = await ensureTorch();
-        if (torch?.ready && analysisGen.current === gen) {
-          torch.stop();
-          const tops = await getTopMoves(
-            torch,
-            targetFen,
-            analysisMode.depth,
-            1
-          );
-          if (tops[0] && toFen(stateRef.current) === targetFen) {
-            setTorchLine({ move: tops[0].move, cp: tops[0].cp });
-          }
-        }
-      } else {
-        setTorchLine(null);
-      }
     } finally {
       if (analysisGen.current === gen) {
         setThinking(false);
       }
     }
-  }, [
-    analysisOn,
-    analysisMode,
-    engineMode,
-    gameOver,
-    hasTorch,
-    ensureTorch,
-    stockfish,
-  ]);
+  }, [analysisOn, analysisMode, gameOver, stockfish]);
 
   useEffect(() => {
     if (!sfReady) return;
@@ -260,102 +204,21 @@ export default function StockfishAnalysis() {
       : "0.0";
 
   return (
-    <div id="analyze-live" className="mt-12 scroll-mt-28">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
-            CHIMERA analysis · Stockfish {STOCKFISH_VERSION}
-            {hasTorch ? ` · ${torchLabel}` : ""}
-          </p>
-          <p className="mt-1 font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.4)]">
-            {hasTorch
-              ? "Dual analysis is on — pick SF 18, second engine, or both. Wired into CHIMERA game review."
-              : "Loading second engine…"}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {engineError ? (
-            <span className="max-w-xs font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,120,120,0.85)]">
-              {engineError}
-            </span>
-          ) : !sfReady ? (
-            <span className="font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.3)]">
-              Loading engine…
-            </span>
-          ) : null}
-          {hasTorch && (
-            <>
-              {(
-                [
-                  ["stockfish", "SF 18"],
-                  ["torch", torchLabel],
-                  ["dual", "Dual"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setEngineMode(id)}
-                  className={`rounded-sm px-3 py-1.5 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.12em] ${
-                    engineMode === id
-                      ? "border border-[rgba(232,197,71,0.45)] text-gold-glow"
-                      : "text-[rgba(255,255,255,0.35)]"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => setAnalysisOn((v) => !v)}
-            className={`rounded-sm px-3 py-1.5 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.15em] ${
-              analysisOn
-                ? "border border-[rgba(0,229,255,0.4)] text-[rgba(0,229,255,0.8)]"
-                : "text-[rgba(255,255,255,0.35)]"
-            }`}
-          >
-            {analysisOn ? "Analysis on" : "Analysis off"}
-          </button>
-          {DEPTH_PRESETS.map((p, i) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setDepthPreset(i)}
-              className={`rounded-sm px-3 py-1.5 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.12em] ${
-                depthPreset === i
-                  ? "border border-[rgba(232,197,71,0.45)] text-gold-glow"
-                  : "text-[rgba(255,255,255,0.35)]"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setOrientation((o) => (o === "w" ? "b" : "w"))}
-            className="nav-link rounded-sm px-3 py-1.5 text-[8px]"
-          >
-            Flip
-          </button>
-          <button
-            type="button"
-            onClick={resetBoard}
-            className="nav-link rounded-sm px-3 py-1.5 text-[8px]"
-          >
-            Reset
-          </button>
-        </div>
-      </div>
+    <div id="analyze-live" className="scroll-mt-28">
+      <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
+        Live analysis · Stockfish {STOCKFISH_VERSION}
+      </p>
+      <p className="mt-1 font-[family-name:var(--font-body)] text-xs text-[rgba(255,255,255,0.4)]">
+        Board + eval bar first — engine lines update as you move.
+      </p>
 
       <div
         id="analyze-review"
-        className="mx-auto grid w-full min-w-0 max-w-5xl gap-8 lg:grid-cols-[minmax(280px,400px)_minmax(260px,320px)] lg:items-start"
+        className="mx-auto mt-6 grid w-full min-w-0 max-w-5xl grid-cols-1 gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(240px,320px)] lg:items-start lg:gap-8"
       >
-        <div className="flex min-w-0 flex-col items-center gap-3 lg:sticky lg:top-24 lg:z-10 lg:self-start">
+        <div className="order-1 flex min-w-0 w-full flex-col items-center gap-3 lg:sticky lg:top-24 lg:z-10 lg:self-start">
           <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.25em] text-[rgba(255,255,255,0.35)] uppercase">
-            Analysis board · always on
+            Analysis board
           </p>
           <div className="flex w-full min-w-0 max-w-full items-stretch justify-center gap-2">
             {analysisOn && (
@@ -368,7 +231,7 @@ export default function StockfishAnalysis() {
                 boardSize="min(calc(100vw - 3.5rem), 32rem)"
               />
             )}
-            <div className="relative w-[min(calc(100vw-3.5rem),32rem)] min-w-[260px] shrink-0 max-lg:mx-auto">
+            <div className="relative w-[min(calc(100vw-3.5rem),32rem)] min-w-[260px] shrink-0">
               <ChessBoardGrid
                 state={state}
                 orientation={orientation}
@@ -379,47 +242,53 @@ export default function StockfishAnalysis() {
                 engineHighlight={engineHighlight}
                 arrows={
                   engineHighlight
-                    ? [{ from: engineHighlight.from, to: engineHighlight.to, color: "green" }]
+                    ? [
+                        {
+                          from: engineHighlight.from,
+                          to: engineHighlight.to,
+                          color: "green",
+                        },
+                      ]
                     : undefined
                 }
               />
-            <AnimatePresence>
-              {promotionPick && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute inset-0 flex items-center justify-center rounded-sm bg-[rgba(5,5,8,0.8)]"
-                >
-                  <div className="glass-panel rounded-sm px-6 py-4">
-                    <p className="mb-3 text-center font-[family-name:var(--font-hud)] text-[9px] tracking-[0.3em] text-[rgba(232,197,71,0.7)]">
-                      PROMOTE
-                    </p>
-                    <div className="flex gap-3">
-                      {PROMOTION_PIECES.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => onPromotion(t)}
-                          className="flex h-12 w-12 items-center justify-center"
-                        >
-                          <ChessPiece
-                            color={state.turn}
-                            type={t}
-                            pieceSet={pieceSet}
-                          />
-                        </button>
-                      ))}
+              <AnimatePresence>
+                {promotionPick && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 flex items-center justify-center rounded-sm bg-[rgba(5,5,8,0.8)]"
+                  >
+                    <div className="glass-panel rounded-sm px-6 py-4">
+                      <p className="mb-3 text-center font-[family-name:var(--font-hud)] text-[9px] tracking-[0.3em] text-[rgba(232,197,71,0.7)]">
+                        PROMOTE
+                      </p>
+                      <div className="flex gap-3">
+                        {PROMOTION_PIECES.map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => onPromotion(t)}
+                            className="flex h-12 w-12 items-center justify-center"
+                          >
+                            <ChessPiece
+                              color={state.turn}
+                              type={t}
+                              pieceSet={pieceSet}
+                            />
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
 
-        <aside className="glass-panel w-full min-w-0 rounded-sm p-5 lg:sticky lg:top-28">
+        <aside className="order-2 glass-panel w-full min-w-0 rounded-sm p-5 lg:sticky lg:top-24">
           <h4 className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.35em] text-gold-glow uppercase">
             Engine readout
           </h4>
@@ -476,23 +345,6 @@ export default function StockfishAnalysis() {
               </p>
             ) : (
               <ul className="mt-2 space-y-2">
-                {torchLine && engineMode === "dual" && (
-                  <li className="rounded-sm border border-[rgba(255,160,60,0.25)] bg-[rgba(255,160,60,0.06)] px-3 py-2">
-                    <span className="font-[family-name:var(--font-hud)] text-[7px] tracking-[0.15em] text-[rgba(255,180,80,0.85)]">
-                      {torchLabel}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => playTopMove(torchLine.move)}
-                      className="mt-1 block w-full text-left font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.75)] hover:text-gold-glow"
-                    >
-                      {uciToSanPreview(state, torchLine.move)}
-                      <span className="ml-2 text-[10px] text-[rgba(255,255,255,0.35)]">
-                        {formatEvalLabel(torchLine.cp, false)}
-                      </span>
-                    </button>
-                  </li>
-                )}
                 {topMoves.map((line, i) => {
                   const san = uciToSanPreview(state, line.move);
                   return (
@@ -524,6 +376,57 @@ export default function StockfishAnalysis() {
             on the board. Runs entirely in your browser.
           </p>
         </aside>
+      </div>
+
+      <div className="mx-auto mt-6 flex w-full max-w-5xl flex-wrap items-center gap-2">
+        {engineError ? (
+          <span className="max-w-xs font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,120,120,0.85)]">
+            {engineError}
+          </span>
+        ) : !sfReady ? (
+          <span className="font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.3)]">
+            Loading engine…
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setAnalysisOn((v) => !v)}
+          className={`rounded-sm px-3 py-1.5 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.15em] ${
+            analysisOn
+              ? "border border-[rgba(0,229,255,0.4)] text-[rgba(0,229,255,0.8)]"
+              : "text-[rgba(255,255,255,0.35)]"
+          }`}
+        >
+          {analysisOn ? "Analysis on" : "Analysis off"}
+        </button>
+        {DEPTH_PRESETS.map((p, i) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setDepthPreset(i)}
+            className={`rounded-sm px-3 py-1.5 font-[family-name:var(--font-hud)] text-[8px] tracking-[0.12em] ${
+              depthPreset === i
+                ? "border border-[rgba(232,197,71,0.45)] text-gold-glow"
+                : "text-[rgba(255,255,255,0.35)]"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setOrientation((o) => (o === "w" ? "b" : "w"))}
+          className="nav-link rounded-sm px-3 py-1.5 text-[8px]"
+        >
+          Flip
+        </button>
+        <button
+          type="button"
+          onClick={resetBoard}
+          className="nav-link rounded-sm px-3 py-1.5 text-[8px]"
+        >
+          Reset
+        </button>
       </div>
     </div>
   );

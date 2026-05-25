@@ -122,51 +122,68 @@ export default function LandingPage() {
             <span className="hud-corner hud-corner--bl" />
             <span className="hud-corner hud-corner--br" />
 
-            <div className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.4em] text-[rgba(0,229,255,0.5)]">
-              {section.tag}
-            </div>
-            <h2 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-semibold tracking-wide text-gold-glow md:text-4xl">
-              {section.title}
-            </h2>
-            <p className="mt-6 max-w-2xl font-[family-name:var(--font-body)] text-base leading-relaxed text-[rgba(255,255,255,0.5)]">
-              {section.body}
-            </p>
+            {section.id === "analyze" ? (
+              <>
+                <DeferredMount minHeight="24rem" rootMargin="280px 0px">
+                  <StockfishAnalysis />
+                </DeferredMount>
+                <div className="mt-10 border-t border-[rgba(255,255,255,0.06)] pt-8">
+                  <div className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.4em] text-[rgba(0,229,255,0.5)]">
+                    {section.tag}
+                  </div>
+                  <h2 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-semibold tracking-wide text-gold-glow md:text-4xl">
+                    {section.title}
+                  </h2>
+                  <p className="mt-6 max-w-2xl font-[family-name:var(--font-body)] text-base leading-relaxed text-[rgba(255,255,255,0.5)]">
+                    {section.body}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.4em] text-[rgba(0,229,255,0.5)]">
+                  {section.tag}
+                </div>
+                <h2 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-semibold tracking-wide text-gold-glow md:text-4xl">
+                  {section.title}
+                </h2>
+                <p className="mt-6 max-w-2xl font-[family-name:var(--font-body)] text-base leading-relaxed text-[rgba(255,255,255,0.5)]">
+                  {section.body}
+                </p>
 
-            {section.id === "play" && (
-              <DeferredMount
-                className="relative z-10 mt-12 scroll-mt-28 pb-[max(7rem,env(safe-area-inset-bottom,0px)+5.5rem)] md:pb-8"
-                minHeight="28rem"
-                rootMargin="320px 0px"
-              >
-                <ChessGame />
-              </DeferredMount>
+                {section.id === "play" && (
+                  <DeferredMount
+                    className="relative z-10 mt-12 scroll-mt-28 pb-[max(7rem,env(safe-area-inset-bottom,0px)+5.5rem)] md:pb-8"
+                    minHeight="28rem"
+                    rootMargin="320px 0px"
+                  >
+                    <ChessGame />
+                  </DeferredMount>
+                )}
+
+                {section.id === "train" && (
+                  <DeferredMount minHeight="16rem" rootMargin="200px 0px">
+                    <TrainHub />
+                  </DeferredMount>
+                )}
+
+                {section.id === "profile" && <ProfilePage />}
+
+                {section.id === "legends" && (
+                  <DeferredMount minHeight="20rem" rootMargin="240px 0px">
+                    <LegendsSection />
+                  </DeferredMount>
+                )}
+              </>
             )}
 
-            {section.id === "analyze" && (
-              <DeferredMount minHeight="24rem" rootMargin="280px 0px">
-                <StockfishAnalysis />
-              </DeferredMount>
+            {section.id !== "analyze" && (
+              <motion.div
+                className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[rgba(232,197,71,0.04)] blur-3xl"
+                animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+                transition={{ duration: 4, repeat: Infinity }}
+              />
             )}
-
-            {section.id === "train" && (
-              <DeferredMount minHeight="16rem" rootMargin="200px 0px">
-                <TrainHub />
-              </DeferredMount>
-            )}
-
-            {section.id === "profile" && <ProfilePage />}
-
-            {section.id === "legends" && (
-              <DeferredMount minHeight="20rem" rootMargin="240px 0px">
-                <LegendsSection />
-              </DeferredMount>
-            )}
-
-            <motion.div
-              className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[rgba(232,197,71,0.04)] blur-3xl"
-              animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-              transition={{ duration: 4, repeat: Infinity }}
-            />
           </div>
         </motion.section>
       ))}

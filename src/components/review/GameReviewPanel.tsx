@@ -129,8 +129,8 @@ export default function GameReviewPanel({
             <p className="mt-2 font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
               {progress?.label ??
                 (loading
-                  ? `Stockfish + dual engine · depth ${REVIEW_MOVE_DEPTH}`
-                  : "Preparing engines…")}
+                  ? `Stockfish · depth ${REVIEW_MOVE_DEPTH}`
+                  : "Preparing engine…")}
             </p>
             <div className="mx-auto mt-8 h-1 max-w-xs overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
               <motion.div
@@ -154,8 +154,8 @@ export default function GameReviewPanel({
           >
             <header className="border-b border-[rgba(232,197,71,0.12)] pb-6">
               <p className="font-[family-name:var(--font-hud)] text-[9px] tracking-[0.35em] text-[rgba(0,229,255,0.55)] uppercase">
-                Post-game report · {report.mode === "online" ? "Online" : "vs CHIMERA"}
-                {report.torchUsed ? " · Stockfish + Torch 4" : " · Stockfish"}
+                Post-game report · {report.mode === "online" ? "Online" : "vs CHIMERA"} ·
+                Stockfish
               </p>
               <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl text-gold-glow">
                 {report.resultLabel}

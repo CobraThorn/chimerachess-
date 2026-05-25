@@ -1,4 +1,4 @@
-import { createEmptyBoard, initialCastling } from "./board";
+import { createEmptyBoard } from "./board";
 import type { Color, GameState, PieceType, Square } from "./types";
 import { file, rank, square } from "./square";
 
@@ -88,7 +88,7 @@ export function fromFen(fen: string): GameState | null {
     if (f !== 8) return null;
   }
 
-  const castling = initialCastling();
+  const castling = { wK: false, wQ: false, bK: false, bQ: false };
   if (castleStr !== "-") {
     castling.wK = castleStr.includes("K");
     castling.wQ = castleStr.includes("Q");

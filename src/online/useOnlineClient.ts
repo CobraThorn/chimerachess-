@@ -15,6 +15,8 @@ export interface OnlineClientState {
   result: GameResult | null;
   endReason: string | null;
   drawOffered: boolean;
+  /** Set when server move ends the game on next tick; blocks client moves until game_over. */
+  terminalPending: boolean;
   serverStats: { activeGames: number; queued: number } | null;
 }
 
@@ -28,6 +30,7 @@ const INITIAL: OnlineClientState = {
   result: null,
   endReason: null,
   drawOffered: false,
+  terminalPending: false,
   serverStats: null,
 };
 
@@ -109,6 +112,7 @@ export function useOnlineClient() {
             result: null,
             endReason: null,
             drawOffered: false,
+            terminalPending: false,
             queueLabel: null,
           });
           logDataEvent("online_match_start", {
@@ -140,20 +144,32 @@ export function useOnlineClient() {
             clock: msg.clock as OnlineMatchInfo["clock"],
             turnStartedAt: Number(msg.turnStartedAt ?? Date.now()),
           };
-          patch({ match: { ...matchRef.current }, error: null });
+          patch({
+            match: { ...matchRef.current },
+            error: null,
+            drawOffered: false,
+            terminalPending: msg.terminalPending === true,
+          });
           break;
         }
-        case "game_over":
+        case "game_over": {
+          const fen = msg.fen != null ? String(msg.fen) : "";
+          if (matchRef.current && fen) {
+            matchRef.current = { ...matchRef.current, fen };
+          }
           patch({
             phase: "ended",
             result: msg.result as GameResult,
             endReason: String(msg.reason ?? "game_over"),
+            terminalPending: false,
+            match: matchRef.current ? { ...matchRef.current } : null,
           });
           logDataEvent("online_match_end", {
             result: String(msg.result ?? ""),
             reason: String(msg.reason ?? ""),
           });
           break;
+        }
         case "draw_offered":
           patch({ drawOffered: true });
           break;
@@ -163,6 +179,7 @@ export function useOnlineClient() {
             phase: "ended",
             result: matchRef.current?.color === "w" ? "white-win" : "black-win",
             endReason: "disconnect",
+            terminalPending: false,
           });
           break;
         case "error":
@@ -189,6 +206,7 @@ export function useOnlineClient() {
             phase: "ended",
             result: m.color === "w" ? "black-win" : "white-win",
             endReason: "disconnect",
+            terminalPending: false,
             error: "Connection lost — game ended.",
           };
         }
@@ -263,6 +281,7 @@ export function useOnlineClient() {
       result: null,
       endReason: null,
       drawOffered: false,
+      terminalPending: false,
       error: null,
     });
   }, [patch]);

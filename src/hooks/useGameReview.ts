@@ -1,12 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import { buildGameReview } from "../review/buildGameReview";
 import { reviewDiag } from "../review/reviewDiagnostics";
-import { enrichReviewWithTorch } from "../review/torchReview";
 import type { GameReviewInput, GameReviewReport, ReviewProgress } from "../review/types";
 import type { ChessEngine } from "../engine/types";
-import { runWithSharedTorch } from "../engine/enginePool";
-import { waitForEngineReady } from "../engine/torch";
-import { isLowPowerDevice } from "../utils/deviceCapability";
+import { waitForEngineReady } from "../engine/stockfish";
 
 export function useGameReview() {
   const [report, setReport] = useState<GameReviewReport | null>(null);
@@ -34,11 +31,7 @@ export function useGameReview() {
   }, [abortReview]);
 
   const runReview = useCallback(
-    async (
-      stockfish: ChessEngine | null,
-      input: GameReviewInput | null,
-      _torch?: ChessEngine | null
-    ) => {
+    async (stockfish: ChessEngine | null, input: GameReviewInput | null) => {
       if (!input || input.moves.length === 0) {
         reviewDiag("error", { reason: "no_moves" });
         setError("No moves to review.");
@@ -64,7 +57,6 @@ export function useGameReview() {
       reviewDiag("run_start", {
         gameId: input.id,
         plies: input.moves.length,
-        lowPower: isLowPowerDevice(),
       });
 
       try {
@@ -80,7 +72,7 @@ export function useGameReview() {
         reviewDiag("engine_ready", { which: "stockfish" });
 
         stockfish.stop();
-        let result = await buildGameReview(
+        const result = await buildGameReview(
           stockfish,
           input,
           (p) => {
@@ -91,19 +83,6 @@ export function useGameReview() {
         if (runId.current !== id) {
           stockfish.stop();
           return;
-        }
-
-        if (!isLowPowerDevice()) {
-          reviewDiag("torch_start", {});
-          const enriched = await runWithSharedTorch((torchEngine) =>
-            enrichReviewWithTorch(torchEngine, result, (p) => {
-              if (runId.current === id) setProgress(p);
-            })
-          );
-          if (enriched) {
-            result = enriched;
-            reviewDiag("torch_done", { used: true });
-          }
         }
 
         if (runId.current === id) {

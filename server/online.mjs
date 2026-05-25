@@ -288,6 +288,13 @@ function handleMove(ws, msg) {
   game.fen = game.chess.fen();
   game.turn = game.chess.turn() === "w" ? "w" : "b";
   game.turnStartedAt = Date.now();
+  game.drawOfferedBy = null;
+
+  const terminalPending =
+    game.chess.isCheckmate() ||
+    game.chess.isStalemate() ||
+    game.chess.isDraw() ||
+    !!checkTimeout(game);
 
   const payload = {
     type: "move",
@@ -298,6 +305,7 @@ function handleMove(ws, msg) {
     clock: { ...game.clock },
     turnStartedAt: game.turnStartedAt,
     san: applied.san,
+    terminalPending,
   };
 
   send(game.white.ws, payload);

@@ -55,6 +55,7 @@ import {
   formatMove,
   getAllLegalMoves,
   getGameStatus,
+  isGameOverStatus,
   getLegalMoves,
   makeMove,
   moveToUci,
@@ -62,7 +63,11 @@ import {
   toFen,
 } from "../../chess";
 import { resolveBotMove } from "../../chess/resolveBotMove";
-import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
+import {
+  CHIMERA_MIN_THINK_MS,
+  CHIMERA_SEARCH_HARD_CAP_MS,
+  waitAtLeast,
+} from "../../chess/movePacing";
 import { createUserMoveClock } from "../../chess/userMoveClock";
 import { loadChimeraSetup } from "../../chimeraSetup/storage";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
@@ -144,15 +149,18 @@ export default function ChimeraMatch() {
   const persistedGameIdRef = useRef<string | null>(null);
   const chimeraTurnGenRef = useRef(0);
   const chimeraMoveAttemptRef = useRef(0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   gameOverRef.current = gameOver;
 
-  const CHIMERA_MOVE_TIMEOUT_MS = 28_000;
-  /** Must cover 3 move attempts + one engine reboot + min think pacing. */
+  /** Per-attempt ceiling: movetime cap + configure + UCI slack. */
+  const CHIMERA_MOVE_TIMEOUT_MS = CHIMERA_SEARCH_HARD_CAP_MS + 2_000;
   const CHIMERA_TURN_WATCHDOG_MS =
     MAX_CHIMERA_MOVE_ATTEMPTS * CHIMERA_MOVE_TIMEOUT_MS +
-    14_000 +
+    10_000 +
     CHIMERA_MIN_THINK_MS +
-    2_000;
+    1_000;
+  const CHIMERA_STUCK_UI_MS = CHIMERA_TURN_WATCHDOG_MS + 3_000;
   const MISTAKE_PERSIST_WAIT_MS = 10_000;
 
   const status = useMemo(() => getGameStatus(state), [state]);
@@ -559,6 +567,7 @@ export default function ChimeraMatch() {
 
         void getChimeraMove(engine, current, chimeraColor, memoryRef.current, {
           mirror: false,
+          livePlay: true,
           archetype: memoryRef.current.chimeraOpponentIdentity,
         })
           .then((result) => {
@@ -650,7 +659,7 @@ export default function ChimeraMatch() {
 
       try {
         const terminal = getGameStatus(current);
-        if (terminal.type !== "ongoing") {
+        if (isGameOverStatus(terminal)) {
           resolveGameEnd(current);
           return;
         }
@@ -689,6 +698,7 @@ export default function ChimeraMatch() {
 
         thinkWatchdog = window.setTimeout(() => {
           resigned = true;
+          chimeraTurnGenRef.current += 1;
           engineRef.current?.stop();
           mistakeEngineRef.current?.stop();
         }, CHIMERA_TURN_WATCHDOG_MS);
@@ -698,16 +708,17 @@ export default function ChimeraMatch() {
         let resolved: { move: Move; uci: string } | null = null;
 
         for (let attempt = 1; attempt <= MAX_CHIMERA_MOVE_ATTEMPTS; attempt++) {
-          if (gameOverRef.current || turnGen !== chimeraTurnGenRef.current) {
-            return;
+          if (
+            resigned ||
+            gameOverRef.current ||
+            turnGen !== chimeraTurnGenRef.current
+          ) {
+            break;
           }
 
-          if (attempt === 2) {
-            logChimeraRecoveryAttempt(2, "engine_stop_and_retry");
-            engine.stop();
+          if (attempt > 1) {
+            logChimeraRecoveryAttempt(attempt, "reboot_play_engine");
             mistakeEngineRef.current?.stop();
-          } else if (attempt === 3) {
-            logChimeraRecoveryAttempt(3, "reboot_play_engine");
             const ok = await rebootPlayEngine();
             if (!ok) break;
             engine = engineRef.current!;
@@ -773,7 +784,7 @@ export default function ChimeraMatch() {
       } finally {
         if (thinkWatchdog !== undefined) window.clearTimeout(thinkWatchdog);
         chimeraTurnLockRef.current = false;
-        if (!gameOverRef.current) setChimeraThinking(false);
+        setChimeraThinking(false);
       }
     },
     [
@@ -809,6 +820,52 @@ export default function ChimeraMatch() {
     runChimeraTurn,
   ]);
 
+  /** Orphan turn lock (e.g. tab backgrounded mid-search) — unblock the loop. */
+  useEffect(() => {
+    if (
+      gameOver ||
+      state.turn !== chimeraColor ||
+      chimeraThinking ||
+      !sfReady ||
+      !chimeraTurnLockRef.current
+    ) {
+      return;
+    }
+    chimeraTurnLockRef.current = false;
+    void runChimeraTurn(state);
+  }, [
+    gameOver,
+    state.turn,
+    chimeraColor,
+    chimeraThinking,
+    sfReady,
+    positionFen,
+    runChimeraTurn,
+  ]);
+
+  /** UI stuck on "calculating" — force-stop workers and retry or resign. */
+  useEffect(() => {
+    if (!chimeraThinking || gameOver || state.turn !== chimeraColor) return;
+    const started = Date.now();
+    const tick = window.setInterval(() => {
+      if (!chimeraThinking || gameOverRef.current) {
+        clearInterval(tick);
+        return;
+      }
+      if (Date.now() - started < CHIMERA_STUCK_UI_MS) return;
+      clearInterval(tick);
+      chimeraTurnGenRef.current += 1;
+      chimeraTurnLockRef.current = false;
+      engineRef.current?.stop();
+      mistakeEngineRef.current?.stop();
+      setChimeraThinking(false);
+      if (!gameOverRef.current && stateRef.current.turn === chimeraColor) {
+        void runChimeraTurn(stateRef.current);
+      }
+    }, 1_500);
+    return () => clearInterval(tick);
+  }, [chimeraThinking, gameOver, state.turn, chimeraColor, runChimeraTurn]);
+
   const applyUserMove = useCallback(
     async (move: Move) => {
       const fenBefore = toFen(state);
@@ -832,10 +889,7 @@ export default function ChimeraMatch() {
       });
 
       const st = getGameStatus(next);
-      const isTerminal =
-        st.type === "checkmate" ||
-        st.type === "stalemate" ||
-        st.type === "draw";
+      const isTerminal = isGameOverStatus(st);
 
       const recordAnalysis = async () => {
         if (chimeraTurnLockRef.current) return;

@@ -21,7 +21,7 @@ function isCommandDone(cmd: string, line: string): boolean {
   return false;
 }
 
-/** UCI chess engine backed by a Web Worker script (Stockfish / Torch 4). */
+/** UCI chess engine backed by a Web Worker script (Stockfish). */
 export function createUciWorkerEngine(scriptUrl: string): ChessEngine {
   const worker = new Worker(scriptUrl);
   const queue: PendingCommand[] = [];

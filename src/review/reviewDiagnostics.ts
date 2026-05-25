@@ -10,8 +10,6 @@ export type ReviewDiagStage =
   | "build_move"
   | "build_skip"
   | "build_done"
-  | "torch_start"
-  | "torch_done"
   | "complete"
   | "error";
 

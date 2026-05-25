@@ -55,29 +55,7 @@ export function useReviewCoach(
     ).then((map) => {
       if (runId.current === id) setNotes(new Map(map));
     });
-  }, [report?.id, mistakeKey]);
-
-  useEffect(() => {
-    if (!report || !mistakesByPly?.size || !hasOpenAiApiKey()) return;
-
-    let cancelled = false;
-    void (async () => {
-      for (const [ply, mi] of mistakesByPly) {
-        if (cancelled) break;
-        const note = await loadReviewCoachNote(report, ply, {
-          mistakeIntel: mi,
-          forceRefresh: true,
-        });
-        if (!cancelled) {
-          setNotes((prev) => new Map(prev).set(ply, note));
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [report, mistakesByPly, mistakeKey]);
+  }, [report?.id, mistakeKey, mistakesByPly]);
 
   const ensureNote = useCallback(
     async (ply: number) => {

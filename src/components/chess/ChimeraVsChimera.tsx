@@ -25,7 +25,7 @@ import {
   moveToUci,
   resolveBotMove,
 } from "../../chess";
-import { waitAtLeast } from "../../chess/movePacing";
+import { CHIMERA_SEARCH_HARD_CAP_MS, waitAtLeast } from "../../chess/movePacing";
 import type { GameState, Move } from "../../chess";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 
@@ -34,6 +34,8 @@ const SPEEDS = [
   { label: "Normal", ms: 650 },
   { label: "Fast", ms: 320 },
 ];
+
+const MIRROR_MOVE_TIMEOUT_MS = CHIMERA_SEARCH_HARD_CAP_MS + 2_000;
 
 export default function ChimeraVsChimera() {
   const [state, setState] = useState<GameState>(createInitialState);
@@ -134,9 +136,24 @@ export default function ChimeraVsChimera() {
     );
 
     try {
-      const uci = await getChimeraMove(engine, current, side, sideMemory, {
-        mirror: true,
-        archetype,
+      const uci = await new Promise<string | null>((resolve) => {
+        const timer = window.setTimeout(() => {
+          engine.stop();
+          resolve(null);
+        }, MIRROR_MOVE_TIMEOUT_MS);
+        void getChimeraMove(engine, current, side, sideMemory, {
+          mirror: true,
+          archetype,
+        })
+          .then((result) => {
+            window.clearTimeout(timer);
+            resolve(result);
+          })
+          .catch(() => {
+            window.clearTimeout(timer);
+            engine.stop();
+            resolve(null);
+          });
       });
       let move = uci ? resolveBotMove(current, uci) : null;
       if (!move) {

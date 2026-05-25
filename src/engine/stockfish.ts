@@ -30,7 +30,9 @@ export function getBestMove(
       resolve(move === "(none)" ? "" : move);
     });
   });
-  return withSearchHardTimeout(search, engine).catch(() => "");
+  return withSearchHardTimeout(search, engine, PLAY_SEARCH_HARD_TIMEOUT_MS).catch(
+    () => ""
+  );
 }
 
 /** Fast reply for live play — caps think time (ms) with a hard timeout so the queue cannot hang. */
@@ -92,7 +94,8 @@ function parseEvalFromOutput(output: string): EvalResult {
 
 export function configureEngine(
   engine: StockfishEngine,
-  opts: { skillLevel?: number; elo?: number; limitStrength?: boolean }
+  opts: { skillLevel?: number; elo?: number; limitStrength?: boolean },
+  timeoutMs = 8_000
 ): Promise<void> {
   const cmds: string[] = [];
   if (opts.limitStrength && opts.elo !== undefined) {
@@ -105,9 +108,21 @@ export function configureEngine(
   if (!cmds.length) return Promise.resolve();
 
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      engine.stop();
+      finish();
+    }, timeoutMs);
+
     const run = (i: number) => {
       if (i >= cmds.length) {
-        engine.send("isready", () => resolve());
+        engine.send("isready", () => finish());
         return;
       }
       engine.send(cmds[i]!, () => run(i + 1));
@@ -154,6 +169,8 @@ function parseTopMovesFromOutput(
 }
 
 const SEARCH_HARD_TIMEOUT_MS = 45_000;
+/** Live CHIMERA / timed moves — fail fast so the UI does not hang on "calculating". */
+const PLAY_SEARCH_HARD_TIMEOUT_MS = 14_000;
 
 function withSearchHardTimeout<T>(
   promise: Promise<T>,
@@ -256,5 +273,20 @@ export function getTopMoves(
   multiPv: number
 ): Promise<{ move: string; cp: number }[]> {
   return searchPosition(engine, fen, depth, multiPv).then((r) => r.topMoves);
+}
+
+/** Poll until a UCI worker reports ready (or load failure). */
+export async function waitForEngineReady(
+  engine: StockfishEngine,
+  timeoutMs: number
+): Promise<boolean> {
+  if (engine.ready) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (engine.ready) return true;
+    if (engine.loadFailed) return false;
+    await new Promise((r) => setTimeout(r, 80));
+  }
+  return engine.ready;
 }
 
