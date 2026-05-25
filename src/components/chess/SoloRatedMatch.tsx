@@ -492,32 +492,50 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     ]
   );
 
-  const onSquareClick = (sq: Square) => {
-    if (!userTurn || phase !== "playing" || botThinking || promotionPick) return;
+  const selectedRef = useRef(selected);
+  const legalTargetsRef = useRef(legalTargets);
+  selectedRef.current = selected;
+  legalTargetsRef.current = legalTargets;
 
-    const piece = state.board[sq];
-    const targetMove = legalTargets.find((m) => m.to === sq);
+  const onSquareClick = useCallback(
+    (sq: Square) => {
+      if (!userTurn || phase !== "playing" || botThinking || promotionPick) return;
 
-    if (targetMove) {
-      const promos = legalTargets.filter((m) => m.to === sq && m.promotion);
-      if (promos.length > 1) {
-        setPromotionPick({ from: selected!, to: sq });
+      const piece = state.board[sq];
+      const legal = legalTargetsRef.current;
+      const sel = selectedRef.current;
+      const targetMove = legal.find((m) => m.to === sq);
+
+      if (targetMove) {
+        const promos = legal.filter((m) => m.to === sq && m.promotion);
+        if (promos.length > 1) {
+          setPromotionPick({ from: sel!, to: sq });
+          return;
+        }
+        applyUserMove(promos[0] ?? targetMove);
         return;
       }
-      applyUserMove(promos[0] ?? targetMove);
-      return;
-    }
 
-    if (piece && piece.color === userColor) {
-      if (selected === sq && legalTargets.length > 0) return;
-      setSelected(sq);
-      setLegalTargets(getLegalMoves(state, sq));
-      return;
-    }
+      if (piece && piece.color === userColor) {
+        if (sel === sq && legal.length > 0) return;
+        setSelected(sq);
+        setLegalTargets(getLegalMoves(state, sq));
+        return;
+      }
 
-    setSelected(null);
-    setLegalTargets([]);
-  };
+      setSelected(null);
+      setLegalTargets([]);
+    },
+    [
+      userTurn,
+      phase,
+      botThinking,
+      promotionPick,
+      state,
+      userColor,
+      applyUserMove,
+    ]
+  );
 
   const onPromotion = (type: PieceType) => {
     if (!promotionPick) return;
@@ -555,7 +573,33 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   return (
     <>
       {crsPostGame && (
-        <CrsPostGamePanel summary={crsPostGame} onContinue={dismissCrsPostGame} />
+        <CrsPostGamePanel
+          summary={crsPostGame}
+          onContinue={() => {
+            dismissCrsPostGame();
+            endedRef.current = false;
+            setPhase("playing");
+            setResult(null);
+            setEndReason(null);
+            setState(createInitialState());
+            setSelected(null);
+            setLegalTargets([]);
+            setLastMove(null);
+            setPromotionPick(null);
+            setBotThinking(false);
+            const mem = loadMemory();
+            playedChimeraEloRef.current = effectiveChimeraElo(mem);
+            gameRef.current = {
+              id: `solo-${Date.now()}`,
+              startedAt: Date.now(),
+              moves: [],
+              mistakes: [],
+              userMoveTimesMs: [],
+            };
+            setClock({ w: tcDef.initialMs, b: tcDef.initialMs });
+            setTurnStartedAt(Date.now());
+          }}
+        />
       )}
       <GameReviewPanel
         report={report}

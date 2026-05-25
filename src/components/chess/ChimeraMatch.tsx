@@ -165,6 +165,10 @@ export default function ChimeraMatch() {
   }, []);
 
   const startNewGame = useCallback(() => {
+    chimeraTurnLockRef.current = false;
+    setChimeraThinking(false);
+    pendingMistakeAnalysesRef.current = 0;
+
     const init = createInitialState();
     setState(init);
     setSelected(null);
@@ -178,7 +182,7 @@ export default function ChimeraMatch() {
     dismiss();
     userMoveClockRef.current = createUserMoveClock();
     userMoveClockRef.current.markTurnStart();
-    playedChimeraEloRef.current = effectiveChimeraElo(memory);
+    playedChimeraEloRef.current = effectiveChimeraElo(loadMemory());
     gameRef.current = {
       id: crypto.randomUUID(),
       moves: [],
@@ -186,7 +190,7 @@ export default function ChimeraMatch() {
       startedAt: Date.now(),
       userMoveTimesMs: userMoveClockRef.current.times,
     };
-  }, [dismiss, memory]);
+  }, [dismiss]);
 
   const pickColor = useCallback(
     (color: Color) => {
@@ -199,7 +203,8 @@ export default function ChimeraMatch() {
 
   useEffect(() => {
     startNewGame();
-  }, [startNewGame]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount only
+  }, []);
 
   useEffect(() => {
     if (!reviewInput) return;
@@ -323,6 +328,11 @@ export default function ChimeraMatch() {
 
   const memoryRef = useRef(memory);
   memoryRef.current = memory;
+
+  const selectedRef = useRef(selected);
+  const legalTargetsRef = useRef(legalTargets);
+  selectedRef.current = selected;
+  legalTargetsRef.current = legalTargets;
 
   const runChimeraTurn = useCallback(
     async (current: GameState) => {
@@ -509,33 +519,46 @@ export default function ChimeraMatch() {
     ]
   );
 
-  const onSquareClick = (sq: Square) => {
-    if (!userTurn || chimeraThinking || gameOver) return;
-    if (promotionPick) return;
+  const onSquareClick = useCallback(
+    (sq: Square) => {
+      if (!userTurn || chimeraThinking || gameOver) return;
+      if (promotionPick) return;
 
-    const piece = state.board[sq];
-    const targetMove = legalTargets.find((m) => m.to === sq);
+      const piece = state.board[sq];
+      const legal = legalTargetsRef.current;
+      const sel = selectedRef.current;
+      const targetMove = legal.find((m) => m.to === sq);
 
-    if (targetMove) {
-      const promos = legalTargets.filter((m) => m.to === sq && m.promotion);
-      if (promos.length > 1) {
-        setPromotionPick({ from: selected!, to: sq });
+      if (targetMove) {
+        const promos = legal.filter((m) => m.to === sq && m.promotion);
+        if (promos.length > 1) {
+          setPromotionPick({ from: sel!, to: sq });
+          return;
+        }
+        void applyUserMove(promos[0] ?? targetMove);
         return;
       }
-      void applyUserMove(promos[0] ?? targetMove);
-      return;
-    }
 
-    if (piece && piece.color === userColor) {
-      if (selected === sq && legalTargets.length > 0) return;
-      setSelected(sq);
-      setLegalTargets(getLegalMoves(state, sq));
-      return;
-    }
+      if (piece && piece.color === userColor) {
+        if (sel === sq && legal.length > 0) return;
+        setSelected(sq);
+        setLegalTargets(getLegalMoves(state, sq));
+        return;
+      }
 
-    setSelected(null);
-    setLegalTargets([]);
-  };
+      setSelected(null);
+      setLegalTargets([]);
+    },
+    [
+      userTurn,
+      chimeraThinking,
+      gameOver,
+      promotionPick,
+      state,
+      userColor,
+      applyUserMove,
+    ]
+  );
 
   const onPromotion = (type: PieceType) => {
     if (!promotionPick) return;
@@ -591,7 +614,10 @@ export default function ChimeraMatch() {
     {crsPostGame && !reviewOpen && (
       <CrsPostGamePanel
         summary={crsPostGame}
-        onContinue={dismissCrsPostGame}
+        onContinue={() => {
+          dismissCrsPostGame();
+          if (gameOver) startNewGame();
+        }}
       />
     )}
     <GameReviewPanel
@@ -605,6 +631,7 @@ export default function ChimeraMatch() {
       onClose={() => {
         dismiss();
         setReviewInput(null);
+        if (gameOver) startNewGame();
       }}
       onNewGame={() => {
         dismiss();

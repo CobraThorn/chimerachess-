@@ -253,7 +253,7 @@ export default function ChessBoardGrid({
       const session = dragSession.current;
       dragSession.current = null;
 
-      if (!session || !onSquareClick) {
+      if (!session || !onSquareClickRef.current) {
         hideGhost();
         return;
       }
@@ -268,24 +268,17 @@ export default function ChessBoardGrid({
         refreshBoardRect();
         skipNextSlideRef.current = true;
         hideGhost();
-        void snapGhostToSquare(dropSq).then(() => onSquareClick(dropSq));
+        void snapGhostToSquare(dropSq).then(() => onSquareClickRef.current?.(dropSq));
         return;
       }
 
       hideGhost();
 
       if (!session.dragging) {
-        onSquareClick(fallbackSq);
+        onSquareClickRef.current?.(fallbackSq);
       }
     },
-    [
-      detachWindowDrag,
-      flip,
-      hideGhost,
-      onSquareClick,
-      refreshBoardRect,
-      snapGhostToSquare,
-    ]
+    [detachWindowDrag, flip, hideGhost, refreshBoardRect, snapGhostToSquare]
   );
 
   const attachWindowDrag = useCallback(
@@ -391,6 +384,20 @@ export default function ChessBoardGrid({
     },
     []
   );
+
+  const onSquareClickRef = useRef(onSquareClick);
+  onSquareClickRef.current = onSquareClick;
+
+  const resetPointerSession = useCallback(() => {
+    dragSession.current = null;
+    windowDragCleanup.current?.();
+    windowDragCleanup.current = null;
+    hideGhost();
+  }, [hideGhost]);
+
+  useEffect(() => {
+    resetPointerSession();
+  }, [disabled, resetPointerSession]);
 
   const slideGlide = slide
     ? {
