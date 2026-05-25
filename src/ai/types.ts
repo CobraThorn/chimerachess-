@@ -37,6 +37,14 @@ export interface UserPattern {
   lastSeen: number;
 }
 
+export type GameTerminationReason =
+  | "checkmate"
+  | "stalemate"
+  | "draw"
+  | "chimera_resigned_engine_failure"
+  | "resignation"
+  | "timeout";
+
 export interface StoredGame {
   id: string;
   startedAt: number;
@@ -48,6 +56,10 @@ export interface StoredGame {
   openingLine: string;
   /** Milliseconds spent on each user move, in order */
   userMoveTimesMs?: number[];
+  /** Machine-readable end reason (sync / analytics). */
+  terminationReason?: GameTerminationReason;
+  /** Portable game notation for backup / future server ingest. */
+  pgn?: string;
 }
 
 /** Last game's Elo math (shown to players). */

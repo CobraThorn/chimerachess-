@@ -29,6 +29,7 @@ export type DataEventType =
   | "consent_update"
   | "page_view"
   | "game_complete"
+  | "chimera_engine_failure"
   | "opening_drill"
   | "online_match_start"
   | "online_match_end"
