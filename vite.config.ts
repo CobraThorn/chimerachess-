@@ -2,8 +2,13 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
+  // Ignore mis-set Netlify VITE_CHIMERA_API_URL — production uses same-origin proxy only.
+  define:
+    mode === "production"
+      ? { "import.meta.env.VITE_CHIMERA_API_URL": JSON.stringify("") }
+      : undefined,
   server: {
     proxy: {
       "/api/openai": {
@@ -27,4 +32,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

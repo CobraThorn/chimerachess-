@@ -29,11 +29,18 @@ function activeSession(account: UserAccount): UserAccount {
   };
 }
 
+const STORAGE_ID_RE = /^[a-zA-Z0-9_-]{8,128}$/;
+
 function newAccountId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
   return `u${Date.now()}${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function ensureStorageId(id: string | undefined): string {
+  if (id && STORAGE_ID_RE.test(id)) return id;
+  return newAccountId();
 }
 
 function buildAccountRecord(input: {
@@ -193,6 +200,7 @@ export async function registerUser(input: {
   const account = local
     ? {
         ...local,
+        id: ensureStorageId(local.id),
         phone: input.phone,
         displayName: input.displayName.trim() || local.displayName,
         consents: input.consents,

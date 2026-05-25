@@ -5,13 +5,22 @@
 
 export const CHIMERA_API_PREFIX = "/api/chimera";
 
+/** Render API — fallback when same-origin Netlify proxy returns HTML */
+export const RENDER_API_ORIGIN = "https://chimerachess-0so2.onrender.com";
+
 /** Host origin only, or "" for same-origin /api/chimera (Netlify/Vite proxy). */
 export function resolveApiBase(): string {
+  // Production builds always use same-origin proxy (netlify.toml). Ignores mis-set Netlify env.
+  if (import.meta.env.PROD) return "";
+
   const env = import.meta.env?.VITE_CHIMERA_API_URL as string | undefined;
   if (!env?.trim()) return "";
   let base = env.trim().replace(/\/+$/, "");
   if (base.endsWith(CHIMERA_API_PREFIX)) {
     base = base.slice(0, -CHIMERA_API_PREFIX.length).replace(/\/+$/, "");
+  }
+  if (base.endsWith("/api")) {
+    base = base.slice(0, -4).replace(/\/+$/, "");
   }
   return base;
 }
@@ -25,7 +34,6 @@ export function normalizeChimeraEndpoint(endpoint: string): string {
     path = path.slice(CHIMERA_API_PREFIX.length) || "/";
     if (!path.startsWith("/")) path = `/${path}`;
   }
-  // Legacy mistaken paths like /api/register → /register
   if (path.startsWith("/api/")) {
     path = path.slice(4) || "/";
     if (!path.startsWith("/")) path = `/${path}`;
@@ -34,30 +42,63 @@ export function normalizeChimeraEndpoint(endpoint: string): string {
   return path;
 }
 
-export function chimeraApiUrl(
+function chimeraPath(endpoint: string): string {
+  return `${CHIMERA_API_PREFIX}${normalizeChimeraEndpoint(endpoint)}`;
+}
+
+/** Candidate URLs in priority order (deduped). */
+export function chimeraApiUrls(
   endpoint: string,
   query?: Record<string, string | number | undefined>
-): string {
-  const path = `${CHIMERA_API_PREFIX}${normalizeChimeraEndpoint(endpoint)}`;
+): string[] {
+  const path = chimeraPath(endpoint);
   const base = resolveApiBase();
-  let url: string;
+  const urls: string[] = [];
+
   if (base) {
-    url = `${base.replace(/\/+$/, "")}${path}`;
+    urls.push(`${base.replace(/\/+$/, "")}${path}`);
   } else if (typeof window !== "undefined") {
-    url = new URL(path, window.location.origin).href;
+    urls.push(new URL(path, window.location.origin).href);
+    urls.push(`${RENDER_API_ORIGIN}${path}`);
   } else {
-    url = path;
+    urls.push(path);
   }
-  url = url.replace(/([^:]\/)\/+/g, "$1");
-  if (query) {
+
+  const withQuery = urls.map((url) => {
+    if (!query) return url.replace(/([^:]\/)\/+/g, "$1");
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) params.set(key, String(value));
     }
     const qs = params.toString();
-    if (qs) url += (url.includes("?") ? "&" : "?") + qs;
+    const clean = url.replace(/([^:]\/)\/+/g, "$1");
+    return qs ? `${clean}${clean.includes("?") ? "&" : "?"}${qs}` : clean;
+  });
+
+  return [...new Set(withQuery)];
+}
+
+export function chimeraApiUrl(
+  endpoint: string,
+  query?: Record<string, string | number | undefined>
+): string {
+  return chimeraApiUrls(endpoint, query)[0];
+}
+
+export function isHtmlResponseText(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return t.startsWith("<!doctype") || t.startsWith("<html");
+}
+
+export async function responseLooksLikeHtml(res: Response): Promise<boolean> {
+  const ct = (res.headers.get("content-type") ?? "").toLowerCase();
+  if (ct.includes("text/html")) return true;
+  try {
+    const peek = await res.clone().text();
+    return isHtmlResponseText(peek);
+  } catch {
+    return false;
   }
-  return url;
 }
 
 export async function parseJsonResponse<T>(res: Response): Promise<T | null> {
@@ -77,15 +118,12 @@ function retryDelayMs(attempt: number): number {
   return 2000 * (attempt + 1);
 }
 
-/** All CHIMERA backend HTTP calls must use this (auth, sync, backup, game API, …). */
-export async function chimeraFetch(
-  endpoint: string,
-  init?: RequestInit,
-  query?: Record<string, string | number | undefined>
+async function fetchWithRetries(
+  url: string,
+  init: RequestInit | undefined,
+  endpointPath: string
 ): Promise<Response> {
-  const path = normalizeChimeraEndpoint(endpoint);
-  const maxAttempts = AUTH_ENDPOINTS.has(path) ? 3 : 1;
-  const url = chimeraApiUrl(endpoint, query);
+  const maxAttempts = AUTH_ENDPOINTS.has(endpointPath) ? 3 : 1;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -101,9 +139,28 @@ export async function chimeraFetch(
     await new Promise((r) => setTimeout(r, retryDelayMs(attempt)));
   }
 
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("Network error");
+  throw lastError instanceof Error ? lastError : new Error("Network error");
+}
+
+/** All CHIMERA backend HTTP calls must use this (auth, sync, backup, game API, …). */
+export async function chimeraFetch(
+  endpoint: string,
+  init?: RequestInit,
+  query?: Record<string, string | number | undefined>
+): Promise<Response> {
+  const endpointPath = normalizeChimeraEndpoint(endpoint);
+  const urls = chimeraApiUrls(endpoint, query);
+  let lastRes: Response | null = null;
+
+  for (const url of urls) {
+    const res = await fetchWithRetries(url, init, endpointPath);
+    lastRes = res;
+    if (!(await responseLooksLikeHtml(res))) {
+      return res;
+    }
+  }
+
+  return lastRes ?? new Response(null, { status: 502, statusText: "Bad Gateway" });
 }
 
 export function chimeraWsUrl(): string {

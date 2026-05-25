@@ -1,6 +1,6 @@
 import type { DataConsents, UserAccount } from "../account/types";
 import type { ChimeraSaveBundle } from "../chimeraSetup/types";
-import { chimeraFetch } from "./client";
+import { chimeraFetch, isHtmlResponseText } from "./client";
 import { clearSessionToken, setSessionToken } from "./session";
 
 export interface RemoteAccount {
@@ -19,22 +19,17 @@ export interface LoginLookupResult {
   save: ChimeraSaveBundle | null;
 }
 
-function isHtmlResponse(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  return t.startsWith("<!doctype") || t.startsWith("<html");
-}
-
 async function readApiJson<T>(res: Response): Promise<{
   data: T | null;
   html: boolean;
 }> {
   const text = await res.text();
   if (!text.trim()) return { data: null, html: false };
-  if (isHtmlResponse(text)) return { data: null, html: true };
+  if (isHtmlResponseText(text)) return { data: null, html: true };
   try {
     return { data: JSON.parse(text) as T, html: false };
   } catch {
-    return { data: null, html: false };
+    return { data: null, html: isHtmlResponseText(text) };
   }
 }
 
@@ -43,17 +38,17 @@ function apiErrorMessage(
   data: { error?: string } | null,
   html = false
 ): string {
-  if (html || (res.status === 404 && !data?.error)) {
-    return "Account API not reachable (wrong URL). Hard-refresh (Ctrl+Shift+R) and try again.";
+  if (html) {
+    return "Could not reach the account server. Wait 30 seconds and try again.";
   }
   if (data?.error) return data.error;
-  if (res.status === 404) {
-    return "Account service not found. Hard-refresh the page and try again.";
-  }
   if (res.status >= 500) {
     return "Server is waking up — wait a moment and try again.";
   }
-  return "Could not reach the account server. Try again.";
+  if (res.status === 404) {
+    return "Account service not found. Try again in a moment.";
+  }
+  return "Could not create account. Try again.";
 }
 
 /** Cloud sign-in with email + password (new device or after local register). */
