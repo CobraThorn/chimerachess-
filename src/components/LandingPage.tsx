@@ -15,6 +15,7 @@ import TrainHub from "./train/TrainHub";
 import ProfilePage from "./profile/ProfilePage";
 import SettingsSection from "./settings/SettingsSection";
 import LegendsSection from "./legends/LegendsSection";
+import DeferredMount from "./ui/DeferredMount";
 
 const FEATURE_SECTIONS = [
   {
@@ -117,18 +118,34 @@ export default function LandingPage() {
             </p>
 
             {section.id === "play" && (
-              <div className="relative z-10 mt-12 scroll-mt-28 pb-[max(7rem,env(safe-area-inset-bottom,0px)+5.5rem)] md:pb-8">
+              <DeferredMount
+                className="relative z-10 mt-12 scroll-mt-28 pb-[max(7rem,env(safe-area-inset-bottom,0px)+5.5rem)] md:pb-8"
+                minHeight="28rem"
+                rootMargin="320px 0px"
+              >
                 <ChessGame />
-              </div>
+              </DeferredMount>
             )}
 
-            {section.id === "analyze" && <StockfishAnalysis />}
+            {section.id === "analyze" && (
+              <DeferredMount minHeight="24rem" rootMargin="280px 0px">
+                <StockfishAnalysis />
+              </DeferredMount>
+            )}
 
-            {section.id === "train" && <TrainHub />}
+            {section.id === "train" && (
+              <DeferredMount minHeight="16rem" rootMargin="200px 0px">
+                <TrainHub />
+              </DeferredMount>
+            )}
 
             {section.id === "profile" && <ProfilePage />}
 
-            {section.id === "legends" && <LegendsSection />}
+            {section.id === "legends" && (
+              <DeferredMount minHeight="20rem" rootMargin="240px 0px">
+                <LegendsSection />
+              </DeferredMount>
+            )}
 
             <motion.div
               className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[rgba(232,197,71,0.04)] blur-3xl"

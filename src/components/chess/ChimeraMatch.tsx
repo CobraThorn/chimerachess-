@@ -54,6 +54,7 @@ import { loadChimeraSetup } from "../../chimeraSetup/storage";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
+import { isLowPowerDevice } from "../../utils/deviceCapability";
 import { useGameReview } from "../../hooks/useGameReview";
 import { watchReviewEngineReady } from "../../review/reviewEngineBoot";
 import type { GameReviewInput } from "../../review/types";
@@ -154,10 +155,20 @@ export default function ChimeraMatch() {
   );
 
   useEffect(() => {
+    const lowPower = isLowPowerDevice();
     const engine = createStockfishEngine();
-    const mistakeEngine = createStockfishEngine();
+    const mistakeEngine = lowPower ? engine : createStockfishEngine();
     engineRef.current = engine;
     mistakeEngineRef.current = mistakeEngine;
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        engine.stop();
+        if (!lowPower) mistakeEngine.stop();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     const t = setInterval(() => {
       if (engine.ready) {
         setSfReady(true);
@@ -166,10 +177,13 @@ export default function ChimeraMatch() {
     }, 100);
     return () => {
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisibility);
       engine.stop();
-      mistakeEngine.stop();
+      if (!lowPower) {
+        mistakeEngine.stop();
+        mistakeEngine.quit();
+      }
       engine.quit();
-      mistakeEngine.quit();
       engineRef.current = null;
       mistakeEngineRef.current = null;
     };

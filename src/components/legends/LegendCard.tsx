@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { useInView } from "../../hooks/useInView";
 import { PHENOTYPE_RADAR_AXES } from "../../ai/cognition/personalityRadar";
 import type { LegendProfile } from "../../content/legends";
 import { radarValuesToSeries } from "../../content/legends";
@@ -102,6 +103,7 @@ interface LegendCardProps {
 }
 
 export default function LegendCard({ legend, index }: LegendCardProps) {
+  const { ref, inView } = useInView("160px 0px", { once: false });
   const radarSeries = [
     {
       id: legend.id,
@@ -114,6 +116,7 @@ export default function LegendCard({ legend, index }: LegendCardProps) {
 
   return (
     <motion.article
+      ref={ref}
       id={`legend-${legend.id}`}
       className="scroll-mt-28"
       initial={{ opacity: 0, y: 48 }}
@@ -171,7 +174,7 @@ export default function LegendCard({ legend, index }: LegendCardProps) {
           </div>
 
           <div className="min-w-0 lg:col-span-2 xl:col-span-1 xl:overflow-hidden">
-            <LegendGameReplayer legend={legend} />
+            <LegendGameReplayer legend={legend} analysisEnabled={inView} />
           </div>
         </div>
       </div>

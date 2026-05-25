@@ -36,9 +36,15 @@ export function useAnalysisEngines() {
       }
     }, 100);
 
+    const onVisibility = () => {
+      if (document.hidden) sf.stop();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       cancelled = true;
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisibility);
       sf.quit();
       setStockfish(null);
       setSfReady(false);

@@ -8,6 +8,7 @@ import {
 import ChimeraAuthGate from "./components/auth/ChimeraAuthGate";
 import ChimeraCustomisePage from "./components/chimera/ChimeraCustomisePage";
 import LandingPage from "./components/LandingPage";
+import AppErrorBoundary from "./components/ui/AppErrorBoundary";
 import { CHIMERA_SETUP_EVENT, CHIMERA_OPEN_SETUP_EVENT } from "./chimeraSetup";
 
 export default function App() {
@@ -42,29 +43,24 @@ export default function App() {
     };
   }, [refreshGates]);
 
-  if (!authenticated) {
-    return <ChimeraAuthGate onAuthenticated={refreshGates} />;
-  }
-
-  if (setupRequired) {
-    return (
-      <ChimeraCustomisePage
-        required
-        onComplete={refreshGates}
-      />
-    );
-  }
-
   return (
-    <>
-      <LandingPage />
-      {setupOptional && (
-        <ChimeraCustomisePage
-          required={false}
-          onComplete={() => setSetupOptional(false)}
-          onDismiss={() => setSetupOptional(false)}
-        />
+    <AppErrorBoundary>
+      {!authenticated ? (
+        <ChimeraAuthGate onAuthenticated={refreshGates} />
+      ) : setupRequired ? (
+        <ChimeraCustomisePage required onComplete={refreshGates} />
+      ) : (
+        <>
+          <LandingPage />
+          {setupOptional && (
+            <ChimeraCustomisePage
+              required={false}
+              onComplete={() => setSetupOptional(false)}
+              onDismiss={() => setSetupOptional(false)}
+            />
+          )}
+        </>
       )}
-    </>
+    </AppErrorBoundary>
   );
 }

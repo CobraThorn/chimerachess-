@@ -1,4 +1,8 @@
 import { useEffect, useRef } from "react";
+import {
+  isLowPowerDevice,
+  prefersReducedEffects,
+} from "../utils/deviceCapability";
 
 interface Particle {
   x: number;
@@ -14,8 +18,12 @@ interface Particle {
 export default function ParticleField() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
+  const lowPower = isLowPowerDevice();
+  const reduced = prefersReducedEffects();
 
   useEffect(() => {
+    if (lowPower || reduced) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -116,7 +124,9 @@ export default function ParticleField() {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", onResize);
     };
-  }, []);
+  }, [lowPower, reduced]);
+
+  if (lowPower || reduced) return null;
 
   return (
     <canvas

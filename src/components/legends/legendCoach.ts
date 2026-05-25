@@ -11,6 +11,8 @@ const CACHE_PREFIX = "chimera-legend-coach-v1:";
 
 /** Deeper than live play — matches review quality for legend retention. */
 export const LEGEND_ANALYSIS_DEPTH = 12;
+/** Shallow eval on phones — on-demand per ply only. */
+export const LEGEND_LITE_DEPTH = 8;
 
 interface GptLegendJson {
   title?: string;

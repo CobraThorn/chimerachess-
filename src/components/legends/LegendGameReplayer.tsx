@@ -10,6 +10,8 @@ import { stateAtLegendPly } from "./legendReplay";
 
 interface LegendGameReplayerProps {
   legend: LegendProfile;
+  /** Off-screen legends must not spawn Stockfish workers (mobile crashes). */
+  analysisEnabled?: boolean;
 }
 
 function NavBtn({
@@ -36,7 +38,10 @@ function NavBtn({
   );
 }
 
-export default function LegendGameReplayer({ legend }: LegendGameReplayerProps) {
+export default function LegendGameReplayer({
+  legend,
+  analysisEnabled = true,
+}: LegendGameReplayerProps) {
   const game = legend.game;
   const highlightPly = game.highlightPly;
   const {
@@ -50,7 +55,8 @@ export default function LegendGameReplayer({ legend }: LegendGameReplayerProps) 
     loadingPly,
     ensureNote,
     analysisDepth,
-  } = useLegendLiveAnalysis(legend);
+    liteMode,
+  } = useLegendLiveAnalysis(legend, { enabled: analysisEnabled });
 
   const maxPly = steps.length > 0 ? steps.length - 1 : 0;
   const [ply, setPly] = useState(0);
@@ -230,7 +236,10 @@ export default function LegendGameReplayer({ legend }: LegendGameReplayerProps) 
       {/* Live coach — stacked below board so it stays in the legend column */}
       <div className="space-y-3 border-t border-[rgba(255,255,255,0.06)] pt-4">
         <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.25em] text-[rgba(0,229,255,0.45)] uppercase">
-          Live coach · depth {analysisDepth}
+            Live coach · depth {analysisDepth}
+            {liteMode && (
+              <span className="text-[rgba(255,255,255,0.3)]"> · lite (phone)</span>
+            )}
           {prefetchTotal > 0 && (
             <span className="text-[rgba(255,255,255,0.3)]">
               {" "}

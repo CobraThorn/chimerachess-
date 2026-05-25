@@ -6,14 +6,28 @@ import type { LegendProfile } from "../content/legends";
 import { buildLegendReplaySteps } from "../components/legends/legendReplay";
 import {
   LEGEND_ANALYSIS_DEPTH,
+  LEGEND_LITE_DEPTH,
   buildLegendCoachNote,
   loadLegendCoachNote,
   prefetchLegendCoachNotes,
 } from "../components/legends/legendCoach";
+import { isLowPowerDevice } from "../utils/deviceCapability";
 import type { EvalPoint } from "../review/types";
 import type { ReviewCoachNote } from "../review/types";
 
-export function useLegendLiveAnalysis(legend: LegendProfile) {
+interface UseLegendLiveAnalysisOptions {
+  /** When false, no Stockfish worker (section off-screen). */
+  enabled?: boolean;
+}
+
+export function useLegendLiveAnalysis(
+  legend: LegendProfile,
+  options?: UseLegendLiveAnalysisOptions
+) {
+  const enabled = options?.enabled ?? true;
+  const lite = isLowPowerDevice();
+  const analysisDepth = lite ? LEGEND_LITE_DEPTH : LEGEND_ANALYSIS_DEPTH;
+
   const steps = useMemo(
     () => buildLegendReplaySteps(legend.game.moves),
     [legend.game.moves]
@@ -28,8 +42,14 @@ export function useLegendLiveAnalysis(legend: LegendProfile) {
   const notesRef = useRef(notes);
   notesRef.current = notes;
   const prefetchingNotes = useRef(false);
+  const litePlyEvalRef = useRef<Map<number, EvalPoint>>(new Map());
 
   useEffect(() => {
+    if (!enabled) {
+      engineRef.current?.stop();
+      return;
+    }
+
     let cancelled = false;
     const engine = createStockfishEngine();
     engineRef.current = engine;
@@ -38,16 +58,60 @@ export function useLegendLiveAnalysis(legend: LegendProfile) {
     setEngineReady(false);
     setEvalPrefetchDone(0);
     setNotesPrefetchDone(0);
+    litePlyEvalRef.current = new Map();
+
+    const onVisibility = () => {
+      if (document.hidden) engine.stop();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    const seedLocalNotes = (timeline: EvalPoint[]) => {
+      const initial = new Map<number, ReviewCoachNote>();
+      for (const step of steps) {
+        const evalPt = timeline[step.ply];
+        const evalBefore =
+          step.ply > 0 ? timeline[step.ply - 1] : undefined;
+        initial.set(
+          step.ply,
+          buildLegendCoachNote(
+            legend,
+            step,
+            evalPt,
+            evalBefore,
+            legend.game.keyMoment
+          )
+        );
+      }
+      setNotes(initial);
+    };
+
+    const markLiteReady = () => {
+      seedLocalNotes([]);
+      if (!cancelled) {
+        setEngineReady(true);
+        setNotesPrefetchDone(steps.length);
+      }
+    };
+
+    const readyPoll = window.setInterval(() => {
+      if (cancelled) return;
+      if (engine.ready) {
+        window.clearInterval(readyPoll);
+        if (lite) markLiteReady();
+      }
+    }, 100);
 
     (async () => {
+      if (lite) return;
+
       const timeline: EvalPoint[] = [];
       for (let i = 0; i < steps.length; i++) {
-        if (cancelled) return;
+        if (cancelled || document.hidden) return;
         try {
           const evalRes = await getEvaluation(
             engine,
             steps[i]!.fen,
-            LEGEND_ANALYSIS_DEPTH
+            analysisDepth
           );
           const { cpWhite, isMate, mateIn } = evalFromResult(
             steps[i]!.fen,
@@ -73,24 +137,7 @@ export function useLegendLiveAnalysis(legend: LegendProfile) {
 
       if (cancelled) return;
       setEngineReady(true);
-
-      const initial = new Map<number, ReviewCoachNote>();
-      for (const step of steps) {
-        const evalPt = timeline[step.ply];
-        const evalBefore =
-          step.ply > 0 ? timeline[step.ply - 1] : undefined;
-        initial.set(
-          step.ply,
-          buildLegendCoachNote(
-            legend,
-            step,
-            evalPt,
-            evalBefore,
-            legend.game.keyMoment
-          )
-        );
-      }
-      if (!cancelled) setNotes(initial);
+      seedLocalNotes(timeline);
 
       if (cancelled || prefetchingNotes.current) return;
       prefetchingNotes.current = true;
@@ -112,23 +159,90 @@ export function useLegendLiveAnalysis(legend: LegendProfile) {
     return () => {
       cancelled = true;
       prefetchingNotes.current = false;
+      window.clearInterval(readyPoll);
+      document.removeEventListener("visibilitychange", onVisibility);
       engine.stop();
       void engine.quit();
       engineRef.current = null;
     };
-  }, [legend, steps]);
+  }, [legend, steps, enabled, lite, analysisDepth]);
+
+  const ensureLiteEval = useCallback(
+    async (ply: number) => {
+      const cached = litePlyEvalRef.current.get(ply);
+      if (cached) return cached;
+      const engine = engineRef.current;
+      const step = steps[ply];
+      if (!engine?.ready || !step) return undefined;
+      try {
+        const evalRes = await getEvaluation(engine, step.fen, analysisDepth);
+        const { cpWhite, isMate, mateIn } = evalFromResult(
+          step.fen,
+          evalRes
+        );
+        const pt: EvalPoint = {
+          ply,
+          cpWhite,
+          label: formatEvalLabel(cpWhite, isMate, mateIn),
+        };
+        litePlyEvalRef.current.set(ply, pt);
+        setEvalTimeline((prev) => {
+          const next = [...prev];
+          next[ply] = pt;
+          return next;
+        });
+        return pt;
+      } catch {
+        return undefined;
+      }
+    },
+    [steps, analysisDepth]
+  );
 
   const ensureNote = useCallback(
     async (ply: number) => {
+      if (lite && enabled) {
+        await ensureLiteEval(ply);
+        if (ply > 0) await ensureLiteEval(ply - 1);
+      }
+
       const existing = notesRef.current.get(ply);
-      if (existing && (existing.source === "gpt" || notesPrefetchDone >= steps.length)) {
+      if (
+        !lite &&
+        existing?.source === "gpt" &&
+        notesPrefetchDone >= steps.length
+      ) {
         return;
       }
+
       const step = steps[ply];
       if (!step) return;
       setLoadingPly(ply);
-      const evalPt = evalTimeline[ply];
-      const evalBefore = ply > 0 ? evalTimeline[ply - 1] : undefined;
+      const evalPt =
+        evalTimeline[ply] ??
+        litePlyEvalRef.current.get(ply);
+      const evalBefore =
+        ply > 0
+          ? evalTimeline[ply - 1] ?? litePlyEvalRef.current.get(ply - 1)
+          : undefined;
+
+      if (lite) {
+        const local = buildLegendCoachNote(
+          legend,
+          step,
+          evalPt,
+          evalBefore,
+          legend.game.keyMoment
+        );
+        setNotes((prev) => {
+          const next = new Map(prev);
+          next.set(ply, local);
+          return next;
+        });
+        setLoadingPly(null);
+        return;
+      }
+
       const note = await loadLegendCoachNote(
         legend,
         step,
@@ -142,10 +256,20 @@ export function useLegendLiveAnalysis(legend: LegendProfile) {
       });
       setLoadingPly(null);
     },
-    [legend, steps, evalTimeline, notesPrefetchDone]
+    [
+      legend,
+      steps,
+      evalTimeline,
+      notesPrefetchDone,
+      lite,
+      enabled,
+      ensureLiteEval,
+    ]
   );
 
-  const notesReady = notesPrefetchDone >= steps.length && engineReady;
+  const notesReady = lite
+    ? engineReady
+    : notesPrefetchDone >= steps.length && engineReady;
 
   return {
     steps,
@@ -158,6 +282,7 @@ export function useLegendLiveAnalysis(legend: LegendProfile) {
     prefetchTotal: steps.length,
     loadingPly,
     ensureNote,
-    analysisDepth: LEGEND_ANALYSIS_DEPTH,
+    analysisDepth,
+    liteMode: lite,
   };
 }
