@@ -74,7 +74,7 @@ export const LEGENDS: LegendProfile[] = [
     years: "b. 1987",
     country: "United States",
     imageUrl:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Hikaru_Nakamura_%28cropped%29.jpg/480px-Hikaru_Nakamura_%28cropped%29.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/5/55/Hikaru_Nakamura_%28cropped%29.jpg",
     imageCredit: "Wikimedia Commons · CC BY-SA 2.0",
     bio: [
       "Hikaru Nakamura became a grandmaster at fifteen and has since defined elite blitz and bullet chess for a global audience.",
@@ -109,7 +109,7 @@ export const LEGENDS: LegendProfile[] = [
     years: "b. 1990",
     country: "Norway",
     imageUrl:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Magnus_Carlsen_2014_%28cropped%29.jpg/480px-Magnus_Carlsen_2014_%28cropped%29.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/0/0f/Magnus_Carlsen_2014_%28cropped%29.jpg",
     imageCredit: "Wikimedia Commons · CC BY-SA 2.0",
     bio: [
       "Magnus Carlsen has held the world number one spot for longer than any player in the modern rating era.",
@@ -144,7 +144,7 @@ export const LEGENDS: LegendProfile[] = [
     years: "1936–1992",
     country: "Latvia / USSR",
     imageUrl:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Mikhail_Tal_1967.jpg/480px-Mikhail_Tal_1967.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/4/4b/Mikhail_Tal_1967.jpg",
     imageCredit: "Wikimedia Commons · public domain",
     banner: {
       kind: "memorial",
@@ -195,7 +195,7 @@ export const LEGENDS: LegendProfile[] = [
     years: "b. 1951",
     country: "Russia",
     imageUrl:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Anatoly_Karpov_1995_%28cropped%29.jpg/480px-Anatoly_Karpov_1995_%28cropped%29.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/6/69/Anatoly_Karpov_1995_%28cropped%29.jpg",
     imageCredit: "Wikimedia Commons · CC BY-SA 3.0",
     bio: [
       "Anatoly Karpov was World Champion from 1975 to 1985 and again in the FIDE title lineage through 1993.",
@@ -241,7 +241,7 @@ export const LEGENDS: LegendProfile[] = [
     years: "b. 1963",
     country: "Azerbaijan / Russia",
     imageUrl:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Garry_Kasparov_%28cropped%29.jpg/480px-Garry_Kasparov_%28cropped%29.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/6/6f/Garry_Kasparov_%28cropped%29.jpg",
     imageCredit: "Wikimedia Commons · CC BY-SA 2.0",
     bio: [
       "Garry Kasparov dominated world chess from 1985 to 2000 with preparation depth and dynamic attacking play.",
@@ -276,7 +276,7 @@ export const LEGENDS: LegendProfile[] = [
     years: "1995–2025",
     country: "United States",
     imageUrl:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Daniel_Naroditsky_in_2024.jpg/480px-Daniel_Naroditsky_in_2024.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/8/8e/Daniel_Naroditsky_in_2024.jpg",
     imageCredit: "Wikimedia Commons · CC BY-SA 4.0",
     banner: {
       kind: "memorial",

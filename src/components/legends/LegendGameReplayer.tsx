@@ -1,5 +1,4 @@
-import { motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useRef, useState, startTransition } from "react";
 import type { Color } from "../../chess";
 import type { LegendProfile } from "../../content/legends";
 import { evalToBarPercent } from "../../engine/analysis";
@@ -93,13 +92,8 @@ export default function LegendGameReplayer({ legend }: LegendGameReplayerProps) 
   const note = notes.get(activePly);
   const replayComplete = maxPly === game.moves.length;
 
-  const evalBarHeight = useMemo(
-    () => "min(calc(100vw - 3.5rem), 18rem)",
-    []
-  );
-
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.3em] text-[rgba(0,229,255,0.55)] uppercase">
@@ -127,177 +121,171 @@ export default function LegendGameReplayer({ legend }: LegendGameReplayerProps) 
         </p>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(240px,320px)_minmax(0,1fr)] xl:items-start">
-        <div className="space-y-3">
-          <motion.div
-            className={`rounded-sm p-3 transition ${
-              isHighlight
-                ? "ring-1 ring-[rgba(232,197,71,0.45)] bg-[rgba(232,197,71,0.04)]"
-                : "bg-[rgba(0,0,0,0.25)]"
-            }`}
-            layout
-          >
-            <div className="flex items-stretch justify-center gap-2">
-              <EvalBar
-                cpWhite={evalPt?.cpWhite ?? 0}
-                label={evalPt?.label ?? "…"}
-                boardSize={evalBarHeight}
-              />
-              <motion.div
-                key={activePly}
-                className="w-[min(calc(100vw-3.5rem),18rem)] min-w-[200px] shrink-0"
-                initial={{ opacity: 0.85 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.14 }}
-              >
-                <ChessBoardGrid
-                  state={state}
-                  orientation={orientation}
-                  lastMove={lastMove}
-                  disabled
-                  squareSize="compact"
-                />
-              </motion.div>
-            </div>
-          </motion.div>
-
-          <p className="text-center font-[family-name:var(--font-hud)] text-[10px] tracking-[0.12em] text-[rgba(255,255,255,0.55)]">
-            {step?.moveLabel ?? "Start"}
-          </p>
-
-          <div className="flex items-center justify-center gap-2">
-            <NavBtn onClick={() => go(0)} label="⏮" title="Start" />
-            <NavBtn onClick={() => go(ply - 1)} label="◀" disabled={ply <= 0} />
-            <span className="min-w-[4rem] text-center font-[family-name:var(--font-hud)] text-[10px] tracking-[0.15em] text-[rgba(255,255,255,0.5)]">
-              {activePly}/{maxPly}
-            </span>
-            <NavBtn onClick={() => go(ply + 1)} label="▶" disabled={ply >= maxPly} />
-            <NavBtn onClick={() => go(maxPly)} label="⏭" title="End" />
-          </div>
-
-          <PlyScrubber
-            min={0}
-            max={maxPly}
-            value={ply}
-            fillClassName="bg-[rgba(232,197,71,0.55)]"
-            thumbClassName="border-[rgba(232,197,71,0.35)] bg-[rgba(232,197,71,0.9)] shadow-[0_0_12px_rgba(232,197,71,0.25)]"
-            onScrubStart={() => {
-              scrubbing.current = true;
-              setPlaying(false);
-            }}
-            onPreview={(v) => startTransition(() => setPreviewPly(v))}
-            onChange={(v) => {
-              setPreviewPly(null);
-              setPly(v);
-            }}
-            onScrubEnd={(v) => {
-              scrubbing.current = false;
-              ensureNote(v);
-            }}
-            aria-label="Scrub legendary game"
+      {/* Board + eval — contained in column, no viewport-based overflow */}
+      <div
+        className={`mx-auto w-full max-w-[min(100%,20rem)] rounded-sm p-3 transition ${
+          isHighlight
+            ? "ring-1 ring-[rgba(232,197,71,0.45)] bg-[rgba(232,197,71,0.04)]"
+            : "bg-[rgba(0,0,0,0.25)]"
+        }`}
+      >
+        <div className="flex items-stretch justify-center gap-2">
+          <EvalBar
+            cpWhite={evalPt?.cpWhite ?? 0}
+            label={evalPt?.label ?? "…"}
+            boardSize="100%"
+            compact
           />
+          <div className="aspect-square min-w-0 w-full max-w-full flex-1">
+            <ChessBoardGrid
+              state={state}
+              orientation={orientation}
+              lastMove={lastMove}
+              disabled
+              animateMoves={false}
+              squareSize="compact"
+              showCorners={false}
+            />
+          </div>
+        </div>
+      </div>
 
-          {evalTimeline.length > 1 && (
-            <div className="flex h-12 items-end gap-px overflow-hidden rounded-sm bg-[rgba(0,0,0,0.3)] p-1">
-              {evalTimeline.map((pt, i) => {
-                const h = evalToBarPercent(pt.cpWhite);
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => go(i)}
-                    className={`min-w-[2px] flex-1 rounded-t-sm ${
-                      i === activePly
-                        ? "ring-1 ring-[rgba(0,229,255,0.7)]"
-                        : "opacity-75 hover:opacity-100"
-                    }`}
-                    style={{
-                      height: `${Math.max(8, h)}%`,
-                      background:
-                        i === activePly
-                          ? "rgba(0,229,255,0.5)"
-                          : "rgba(134,239,172,0.35)",
-                    }}
-                    title={pt.label}
-                  />
-                );
-              })}
-            </div>
+      <p className="text-center font-[family-name:var(--font-hud)] text-[10px] tracking-[0.12em] text-[rgba(255,255,255,0.55)]">
+        {step?.moveLabel ?? "Start"}
+      </p>
+
+      <div className="flex items-center justify-center gap-2">
+        <NavBtn onClick={() => go(0)} label="⏮" title="Start" />
+        <NavBtn onClick={() => go(ply - 1)} label="◀" disabled={ply <= 0} />
+        <span className="min-w-[4rem] text-center font-[family-name:var(--font-hud)] text-[10px] tracking-[0.15em] text-[rgba(255,255,255,0.5)]">
+          {activePly}/{maxPly}
+        </span>
+        <NavBtn onClick={() => go(ply + 1)} label="▶" disabled={ply >= maxPly} />
+        <NavBtn onClick={() => go(maxPly)} label="⏭" title="End" />
+      </div>
+
+      <PlyScrubber
+        min={0}
+        max={maxPly}
+        value={ply}
+        fillClassName="bg-[rgba(232,197,71,0.55)]"
+        thumbClassName="border-[rgba(232,197,71,0.35)] bg-[rgba(232,197,71,0.9)] shadow-[0_0_12px_rgba(232,197,71,0.25)]"
+        onScrubStart={() => {
+          scrubbing.current = true;
+          setPlaying(false);
+        }}
+        onPreview={(v) => startTransition(() => setPreviewPly(v))}
+        onChange={(v) => {
+          setPreviewPly(null);
+          setPly(v);
+        }}
+        onScrubEnd={(v) => {
+          scrubbing.current = false;
+          ensureNote(v);
+        }}
+        aria-label="Scrub legendary game"
+      />
+
+      {evalTimeline.length > 1 && (
+        <div className="flex h-12 items-end gap-px overflow-hidden rounded-sm bg-[rgba(0,0,0,0.3)] p-1">
+          {evalTimeline.map((pt, i) => {
+            const h = evalToBarPercent(pt.cpWhite);
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => go(i)}
+                className={`min-w-[2px] flex-1 rounded-t-sm ${
+                  i === activePly
+                    ? "ring-1 ring-[rgba(0,229,255,0.7)]"
+                    : "opacity-75 hover:opacity-100"
+                }`}
+                style={{
+                  height: `${Math.max(8, h)}%`,
+                  background:
+                    i === activePly
+                      ? "rgba(0,229,255,0.5)"
+                      : "rgba(134,239,172,0.35)",
+                }}
+                title={pt.label}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {highlightPly != null && highlightPly <= maxPly && (
+        <button
+          type="button"
+          onClick={() => {
+            setPlaying(false);
+            go(highlightPly);
+          }}
+          className="w-full rounded-sm border border-[rgba(0,229,255,0.2)] py-2 font-[family-name:var(--font-hud)] text-[9px] tracking-[0.25em] text-[rgba(0,229,255,0.75)] uppercase transition hover:bg-[rgba(0,229,255,0.06)]"
+        >
+          Jump to key moment (ply {highlightPly})
+        </button>
+      )}
+
+      {/* Live coach — stacked below board so it stays in the legend column */}
+      <div className="space-y-3 border-t border-[rgba(255,255,255,0.06)] pt-4">
+        <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.25em] text-[rgba(0,229,255,0.45)] uppercase">
+          Live coach · depth {analysisDepth}
+          {prefetchTotal > 0 && (
+            <span className="text-[rgba(255,255,255,0.3)]">
+              {" "}
+              · eval {evalPrefetchDone}/{prefetchTotal}
+              {!notesReady && notesPrefetchDone > 0 && (
+                <> · notes {notesPrefetchDone}/{prefetchTotal}</>
+              )}
+              {notesReady && <> · all moves ready</>}
+            </span>
           )}
+        </p>
 
-          {highlightPly != null && highlightPly <= maxPly && (
-            <button
-              type="button"
-              onClick={() => {
-                setPlaying(false);
-                go(highlightPly);
-              }}
-              className="w-full rounded-sm border border-[rgba(0,229,255,0.2)] py-2 font-[family-name:var(--font-hud)] text-[9px] tracking-[0.25em] text-[rgba(0,229,255,0.75)] uppercase transition hover:bg-[rgba(0,229,255,0.06)]"
-            >
-              Jump to key moment (ply {highlightPly})
-            </button>
+        <div className="glass-panel rounded-sm p-5">
+          {loadingPly === activePly && !note ? (
+            <p className="animate-pulse text-sm text-[rgba(0,229,255,0.5)]">
+              Generating coach note…
+            </p>
+          ) : note ? (
+            <>
+              <h4 className="font-[family-name:var(--font-display)] text-lg text-white">
+                {note.title}
+              </h4>
+              <p className="mt-3 text-sm leading-relaxed text-[rgba(255,255,255,0.6)]">
+                {note.explanation}
+              </p>
+              <p className="mt-3 border-t border-[rgba(255,255,255,0.06)] pt-3 text-xs italic text-[rgba(232,197,71,0.75)]">
+                {note.teachingPoint}
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-[rgba(255,255,255,0.4)]">
+              Scrub the timeline to load commentary for each move.
+            </p>
           )}
         </div>
 
-        <div className="min-w-0 space-y-3">
-          <p className="font-[family-name:var(--font-hud)] text-[8px] tracking-[0.25em] text-[rgba(0,229,255,0.45)] uppercase">
-            Live coach · depth {analysisDepth}
-            {prefetchTotal > 0 && (
-              <span className="text-[rgba(255,255,255,0.3)]">
-                {" "}
-                · eval {evalPrefetchDone}/{prefetchTotal}
-                {!notesReady && notesPrefetchDone > 0 && (
-                  <> · notes {notesPrefetchDone}/{prefetchTotal}</>
-                )}
-                {notesReady && <> · all moves ready</>}
-              </span>
-            )}
+        <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-sm border border-[rgba(255,255,255,0.04)] p-2">
+          <p className="mb-1 font-[family-name:var(--font-hud)] text-[7px] tracking-[0.2em] text-[rgba(255,255,255,0.25)] uppercase">
+            Full game
           </p>
-
-          <div className="glass-panel rounded-sm p-5">
-            {loadingPly === activePly && !note ? (
-              <p className="animate-pulse text-sm text-[rgba(0,229,255,0.5)]">
-                Generating coach note…
-              </p>
-            ) : note ? (
-              <>
-                <h4 className="font-[family-name:var(--font-display)] text-lg text-white md:text-xl">
-                  {note.title}
-                </h4>
-                <p className="mt-3 text-sm leading-relaxed text-[rgba(255,255,255,0.6)]">
-                  {note.explanation}
-                </p>
-                <p className="mt-3 border-t border-[rgba(255,255,255,0.06)] pt-3 text-xs italic text-[rgba(232,197,71,0.75)]">
-                  {note.teachingPoint}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-[rgba(255,255,255,0.4)]">
-                Scrub the timeline to load commentary for each move.
-              </p>
-            )}
-          </div>
-
-          <div className="max-h-48 space-y-0.5 overflow-y-auto rounded-sm border border-[rgba(255,255,255,0.04)] p-2">
-            <p className="mb-1 font-[family-name:var(--font-hud)] text-[7px] tracking-[0.2em] text-[rgba(255,255,255,0.25)] uppercase">
-              Full game
-            </p>
-            {steps.map((s) => (
-              <button
-                key={s.ply}
-                type="button"
-                onClick={() => go(s.ply)}
-                className={`flex w-full gap-2 rounded-sm px-2 py-1 text-left text-[11px] ${
-                  s.ply === ply
-                    ? "bg-[rgba(0,229,255,0.1)] text-white"
-                    : "text-[rgba(255,255,255,0.4)]"
-                }`}
-              >
-                <span className="w-6 shrink-0 opacity-40">{s.ply}</span>
-                <span className="truncate font-mono">{s.moveLabel}</span>
-              </button>
-            ))}
-          </div>
+          {steps.map((s) => (
+            <button
+              key={s.ply}
+              type="button"
+              onClick={() => go(s.ply)}
+              className={`flex w-full gap-2 rounded-sm px-2 py-1 text-left text-[11px] ${
+                s.ply === ply
+                  ? "bg-[rgba(0,229,255,0.1)] text-white"
+                  : "text-[rgba(255,255,255,0.4)]"
+              }`}
+            >
+              <span className="w-6 shrink-0 opacity-40">{s.ply}</span>
+              <span className="truncate font-mono">{s.moveLabel}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>

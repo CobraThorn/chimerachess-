@@ -33,6 +33,8 @@ export interface ChessBoardGridProps {
   squareHeats?: Map<number, { fill: string; ring: string }>;
   squareSize?: "default" | "compact";
   showCorners?: boolean;
+  /** Replay / review boards should disable glide to avoid ghost pieces. */
+  animateMoves?: boolean;
 }
 
 const BOARD_SHELL_CLASS =
@@ -78,6 +80,7 @@ export default function ChessBoardGrid({
   squareHeats,
   squareSize = "default",
   showCorners = true,
+  animateMoves = true,
 }: ChessBoardGridProps) {
   const { boardTheme, pieceSet } = useCustomisation();
   const flip = orientation === "b";
@@ -118,7 +121,7 @@ export default function ChessBoardGrid({
     const prevBoard = prevBoardRef.current;
     prevBoardRef.current = state.board;
 
-    if (!lastMove) return;
+    if (!animateMoves || !lastMove) return;
     if (skipNextSlideRef.current) {
       skipNextSlideRef.current = false;
       return;
@@ -140,7 +143,7 @@ export default function ChessBoardGrid({
     });
     const t = window.setTimeout(() => setSlide(null), MOVE_SLIDE_MS + 40);
     return () => window.clearTimeout(t);
-  }, [lastMove, state.board]);
+  }, [lastMove, state.board, animateMoves]);
 
   const refreshBoardRect = useCallback(() => {
     boardRectRef.current = boardRef.current?.getBoundingClientRect() ?? null;

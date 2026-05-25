@@ -11,6 +11,7 @@ function LegendPortrait({
 }: {
   legend: LegendProfile;
 }) {
+  const [src, setSrc] = useState(legend.imageUrl);
   const [failed, setFailed] = useState(false);
   const initials = legend.name
     .split(/\s+/)
@@ -32,11 +33,22 @@ function LegendPortrait({
   return (
     <figure className="space-y-2">
       <img
-        src={legend.imageUrl}
+        src={src}
         alt={legend.fullName}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        onError={() => setFailed(true)}
+        loading="eager"
+        decoding="async"
+        onError={() => {
+          if (src !== legend.imageUrl) {
+            setFailed(true);
+            return;
+          }
+          const thumb = legend.imageUrl.replace(
+            /\/commons\/([^/]+\/[^/]+)$/,
+            "/commons/thumb/$1/440px-$1"
+          );
+          if (thumb !== legend.imageUrl) setSrc(thumb);
+          else setFailed(true);
+        }}
         className="aspect-[4/5] w-full rounded-sm object-cover object-top shadow-lg ring-1 ring-[rgba(232,197,71,0.15)]"
       />
       <figcaption className="font-[family-name:var(--font-hud)] text-[7px] tracking-[0.12em] text-[rgba(255,255,255,0.28)]">
@@ -119,7 +131,7 @@ export default function LegendCard({ legend, index }: LegendCardProps) {
           </div>
         )}
 
-        <div className="grid gap-10 lg:grid-cols-2 xl:grid-cols-[minmax(220px,260px)_1fr_minmax(280px,340px)]">
+        <div className="grid gap-10 lg:grid-cols-2 xl:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(0,22rem)]">
           <div className="space-y-5 lg:max-w-xs">
             <LegendPortrait legend={legend} />
             <div>
@@ -156,7 +168,7 @@ export default function LegendCard({ legend, index }: LegendCardProps) {
             </div>
           </div>
 
-          <div className="lg:col-span-2 xl:col-span-1">
+          <div className="min-w-0 lg:col-span-2 xl:col-span-1 xl:overflow-hidden">
             <LegendGameReplayer legend={legend} />
           </div>
         </div>

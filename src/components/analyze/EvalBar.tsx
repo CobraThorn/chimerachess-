@@ -8,6 +8,8 @@ interface EvalBarProps {
   thinking?: boolean;
   /** Match adjacent board width, e.g. `min(calc(100vw - 3.5rem), 32rem)` */
   boardSize?: string;
+  /** Shorter bar for compact legend / sidebar boards */
+  compact?: boolean;
 }
 
 export default function EvalBar({
@@ -17,16 +19,25 @@ export default function EvalBar({
   label,
   thinking,
   boardSize = "min(92vw, 32rem)",
+  compact = false,
 }: EvalBarProps) {
   const pct = evalToBarPercent(cpWhite, isMate, mateIn);
   const whiteDominant = pct >= 52;
   const blackDominant = pct <= 48;
 
+  const fillParent = boardSize === "100%";
+
   return (
-    <div className="flex shrink-0 flex-col items-center gap-2">
+    <div
+      className={`flex shrink-0 flex-col items-center gap-2 ${fillParent ? "h-full self-stretch" : ""}`}
+    >
       <div
-        className="relative w-7 overflow-hidden rounded-sm border border-[rgba(255,255,255,0.08)]"
-        style={{ height: boardSize, minHeight: 260, maxHeight: "32rem" }}
+        className={`relative w-7 overflow-hidden rounded-sm border border-[rgba(255,255,255,0.08)] ${fillParent ? "min-h-0 flex-1" : ""}`}
+        style={{
+          height: fillParent ? "100%" : boardSize,
+          minHeight: compact && !fillParent ? undefined : fillParent ? undefined : 260,
+          maxHeight: compact && !fillParent ? "20rem" : fillParent ? undefined : "32rem",
+        }}
       >
         <div
           className="absolute bottom-0 left-0 right-0 transition-all duration-500 ease-out"
