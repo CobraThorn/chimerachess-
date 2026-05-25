@@ -50,11 +50,19 @@ async function preferTorchLineWhenStrong(
   depth: number
 ): Promise<string> {
   if (!stockfishUci || targetElo < 2400) return stockfishUci;
-  const torch = await acquireSharedTorch();
-  if (!torch) return stockfishUci;
 
-  torch.stop();
-  const torchUci = await getBestMove(torch, fen, Math.min(20, depth + 1));
+  const torchUci = await Promise.race([
+    (async () => {
+      const torch = await acquireSharedTorch();
+      if (!torch) return null;
+      torch.stop();
+      return getBestMove(torch, fen, Math.min(18, depth + 1));
+    })(),
+    new Promise<string | null>((resolve) => {
+      window.setTimeout(() => resolve(null), 6_000);
+    }),
+  ]);
+
   if (!torchUci || torchUci === stockfishUci) return stockfishUci;
   if (!uciToMove(state, torchUci)) return stockfishUci;
   return torchUci;

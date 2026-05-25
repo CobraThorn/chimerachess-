@@ -38,6 +38,12 @@ export function createUciWorkerEngine(scriptUrl: string): ChessEngine {
     }
   };
 
+  /** Drop pending searches so stop()/new go never waits behind a stuck command. */
+  const abortPendingCommands = () => {
+    flushQueue();
+    sendChain = Promise.resolve();
+  };
+
   const dispatchLine = (line: string) => {
     analysisHook?.(line);
     for (const fn of lineListeners) fn(line);
@@ -132,16 +138,17 @@ export function createUciWorkerEngine(scriptUrl: string): ChessEngine {
     },
 
     stop() {
+      abortPendingCommands();
       sendRaw("stop");
     },
 
     quit() {
+      abortPendingCommands();
       sendRaw("quit");
       worker.terminate();
       lineListeners = [];
       hookGeneration += 1;
       analysisHook = null;
-      flushQueue();
     },
   };
 

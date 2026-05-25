@@ -54,7 +54,6 @@ import { loadChimeraSetup } from "../../chimeraSetup/storage";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
-import { isLowPowerDevice } from "../../utils/deviceCapability";
 import { reviewDiag } from "../../review/reviewDiagnostics";
 import { useGameReview } from "../../hooks/useGameReview";
 import { watchReviewEngineReady } from "../../review/reviewEngineBoot";
@@ -156,33 +155,31 @@ export default function ChimeraMatch() {
   );
 
   const releasePlayEngines = useCallback(() => {
-    const lowPower = isLowPowerDevice();
     const play = engineRef.current;
     const mistake = mistakeEngineRef.current;
     play?.stop();
     mistake?.stop();
     void play?.quit();
-    if (!lowPower && mistake && mistake !== play) void mistake.quit();
+    if (mistake && mistake !== play) void mistake.quit();
     engineRef.current = null;
     mistakeEngineRef.current = null;
     setSfReady(false);
   }, []);
 
   const bootPlayEngines = useCallback(() => {
-    if (engineRef.current?.ready) {
+    if (engineRef.current?.ready && mistakeEngineRef.current?.ready) {
       setSfReady(true);
       return () => {};
     }
-    const lowPower = isLowPowerDevice();
     const engine = createStockfishEngine();
-    const mistakeEngine = lowPower ? engine : createStockfishEngine();
+    const mistakeEngine = createStockfishEngine();
     engineRef.current = engine;
     mistakeEngineRef.current = mistakeEngine;
 
     const onVisibility = () => {
       if (document.hidden) {
         engine.stop();
-        if (!lowPower) mistakeEngine.stop();
+        mistakeEngine.stop();
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -199,10 +196,8 @@ export default function ChimeraMatch() {
       clearInterval(t);
       document.removeEventListener("visibilitychange", onVisibility);
       engine.stop();
-      if (!lowPower && mistakeEngine !== engine) {
-        mistakeEngine.stop();
-        mistakeEngine.quit();
-      }
+      mistakeEngine.stop();
+      mistakeEngine.quit();
       engine.quit();
       engineRef.current = null;
       mistakeEngineRef.current = null;
@@ -425,13 +420,20 @@ export default function ChimeraMatch() {
         setChimeraThinking(false);
       }, 45_000);
       try {
+        pendingMistakeAnalysesRef.current = 0;
         engine.stop();
         mistakeEngineRef.current?.stop();
 
-        let uci = await getChimeraMove(engine, current, chimeraColor, memoryRef.current, {
-          mirror: false,
-          archetype: memoryRef.current.chimeraOpponentIdentity,
-        });
+        const chimeraMoveMs = 28_000;
+        let uci = await Promise.race([
+          getChimeraMove(engine, current, chimeraColor, memoryRef.current, {
+            mirror: false,
+            archetype: memoryRef.current.chimeraOpponentIdentity,
+          }),
+          new Promise<string | null>((resolve) => {
+            window.setTimeout(() => resolve(null), chimeraMoveMs);
+          }),
+        ]);
 
         let move = uci ? resolveBotMove(current, uci) : null;
         if (!move) {
@@ -533,6 +535,7 @@ export default function ChimeraMatch() {
         st.type === "draw";
 
       const recordAnalysis = async () => {
+        if (chimeraTurnLockRef.current) return;
         const analysisEngine = mistakeEngineRef.current;
         if (!analysisEngine?.ready) return;
         const fenAfter = toFen(next);

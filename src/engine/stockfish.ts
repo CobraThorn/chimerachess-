@@ -94,25 +94,26 @@ export function configureEngine(
   engine: StockfishEngine,
   opts: { skillLevel?: number; elo?: number; limitStrength?: boolean }
 ): Promise<void> {
+  const cmds: string[] = [];
+  if (opts.limitStrength && opts.elo !== undefined) {
+    cmds.push("setoption name UCI_LimitStrength value true");
+    cmds.push(`setoption name UCI_Elo value ${opts.elo}`);
+  }
+  if (opts.skillLevel !== undefined) {
+    cmds.push(`setoption name Skill Level value ${opts.skillLevel}`);
+  }
+  if (!cmds.length) return Promise.resolve();
+
   return new Promise((resolve) => {
-    const cmds: string[] = [];
-    if (opts.limitStrength && opts.elo !== undefined) {
-      cmds.push("setoption name UCI_LimitStrength value true");
-      cmds.push(`setoption name UCI_Elo value ${opts.elo}`);
-    }
-    if (opts.skillLevel !== undefined) {
-      cmds.push(`setoption name Skill Level value ${opts.skillLevel}`);
-    }
-    let i = 0;
-    const next = () => {
+    const run = (i: number) => {
       if (i >= cmds.length) {
-        resolve();
+        engine.send("isready", () => resolve());
         return;
       }
-      engine.send(cmds[i++]);
-      setTimeout(next, 40);
+      engine.send(cmds[i]!, () => run(i + 1));
     };
-    next();
+    engine.stop();
+    run(0);
   });
 }
 
