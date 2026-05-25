@@ -151,18 +151,44 @@ function parseTopMovesFromOutput(
   return results;
 }
 
+const SEARCH_HARD_TIMEOUT_MS = 45_000;
+
+function withSearchHardTimeout<T>(
+  promise: Promise<T>,
+  engine: StockfishEngine,
+  ms = SEARCH_HARD_TIMEOUT_MS
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      engine.stop();
+      reject(new Error("Engine search timed out — try closing review and starting again."));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 export function getEvaluation(
   engine: StockfishEngine,
   fen: string,
   depth = 10
 ): Promise<EvalResult> {
-  return new Promise((resolve) => {
+  const search = new Promise<EvalResult>((resolve) => {
     engine.stop();
     engine.send(`position fen ${fen}`);
     engine.send(`go depth ${depth}`, (out) => {
       resolve(parseEvalFromOutput(out));
     });
   });
+  return withSearchHardTimeout(search, engine);
 }
 
 /** One search: root eval + top N lines (scores from White's perspective). */
@@ -172,7 +198,10 @@ export function searchPosition(
   depth: number,
   multiPv: number
 ): Promise<{ eval: EvalResult; topMoves: { move: string; cp: number }[] }> {
-  return new Promise((resolve) => {
+  const search = new Promise<{
+    eval: EvalResult;
+    topMoves: { move: string; cp: number }[];
+  }>((resolve) => {
     engine.stop();
     engine.send(`setoption name MultiPV value ${multiPv}`);
     engine.send(`position fen ${fen}`);
@@ -184,6 +213,7 @@ export function searchPosition(
       });
     });
   });
+  return withSearchHardTimeout(search, engine);
 }
 
 /** MultiPV: top N moves with scores (centipawns from White's perspective). */

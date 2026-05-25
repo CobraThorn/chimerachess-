@@ -112,7 +112,14 @@ export default function GameReviewPanel({
         )}
 
         {(loading || (open && !report && !error)) && (
-          <div className="py-16 text-center">
+          <div className="relative py-16 text-center">
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute right-0 top-0 nav-link rounded-sm px-4 py-2 text-[9px]"
+            >
+              Cancel
+            </button>
             <p className="font-[family-name:var(--font-hud)] text-[10px] tracking-[0.4em] text-[rgba(0,229,255,0.6)] uppercase">
               Game review
             </p>

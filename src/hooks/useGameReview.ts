@@ -12,12 +12,22 @@ export function useGameReview() {
   const [error, setError] = useState<string | null>(null);
   const runId = useRef(0);
 
-  const dismiss = useCallback(() => {
-    setReport(null);
+  const abortReview = useCallback(() => {
+    runId.current += 1;
     setLoading(false);
     setProgress(null);
-    setError(null);
   }, []);
+
+  const dismiss = useCallback(() => {
+    abortReview();
+    setReport(null);
+    setError(null);
+  }, [abortReview]);
+
+  const failReview = useCallback((message: string) => {
+    abortReview();
+    setError(message);
+  }, [abortReview]);
 
   const runReview = useCallback(
     async (
@@ -93,5 +103,14 @@ export function useGameReview() {
     []
   );
 
-  return { report, loading, progress, error, runReview, dismiss };
+  return {
+    report,
+    loading,
+    progress,
+    error,
+    runReview,
+    dismiss,
+    abortReview,
+    failReview,
+  };
 }

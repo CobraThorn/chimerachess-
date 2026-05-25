@@ -23,6 +23,7 @@ import { useGameReview } from "../../hooks/useGameReview";
 import { finishGame, loadMemory, saveMemory } from "../../ai";
 import { CHIMERA_MEMORY_EVENT, type ChimeraMemory, type StoredGame } from "../../ai/types";
 import { onlineMovesToRecords } from "../../review/buildGameReview";
+import { watchReviewEngineReady } from "../../review/reviewEngineBoot";
 import { onlineResultToReview } from "../../review/types";
 import GameReviewPanel from "../review/GameReviewPanel";
 import { clearCrsPostGame, tcToCrsMode } from "../../crs/profile";
@@ -82,7 +83,16 @@ export default function OnlineMatch({
     to: Square;
   } | null>(null);
 
-  const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
+  const {
+    report,
+    loading,
+    progress,
+    error: reviewError,
+    runReview,
+    dismiss,
+    abortReview,
+    failReview,
+  } = useGameReview();
   const reviewEngineRef = useRef<StockfishEngine | null>(null);
   const reviewStartedRef = useRef(false);
   const [memory, setMemory] = useState<ChimeraMemory>(() => loadMemory());
@@ -148,19 +158,30 @@ export default function OnlineMatch({
     reviewEngineRef.current = engine;
     let cancelled = false;
 
-    const timer = setInterval(() => {
-      if (cancelled || !engine.ready) return;
-      clearInterval(timer);
-      void (async () => {
-        const torch = await acquireSharedTorch();
-        if (!cancelled) void runReview(engine, reviewInput, torch);
-      })();
-    }, 120);
+    const stopWatch = watchReviewEngineReady(
+      engine,
+      () => {
+        if (cancelled) return;
+        void (async () => {
+          const torch = await acquireSharedTorch();
+          if (!cancelled) void runReview(engine, reviewInput, torch);
+        })();
+      },
+      () => {
+        if (!cancelled) {
+          failReview(
+            "Stockfish did not start in time — refresh the page and try again."
+          );
+        }
+      }
+    );
 
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stopWatch();
+      abortReview();
       if (reviewEngineRef.current === engine) {
+        engine.stop();
         engine.quit();
         reviewEngineRef.current = null;
       }
@@ -175,6 +196,8 @@ export default function OnlineMatch({
     match.tc,
     userColor,
     runReview,
+    abortReview,
+    failReview,
   ]);
 
   useEffect(() => {
@@ -290,6 +313,7 @@ export default function OnlineMatch({
       loading={loading}
       progress={progress}
       error={reviewError}
+      open={client.phase === "ended"}
       memory={memory}
       storedGame={storedGame}
       onClose={dismiss}

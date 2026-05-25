@@ -55,6 +55,7 @@ import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
+import { watchReviewEngineReady } from "../../review/reviewEngineBoot";
 import type { GameReviewInput } from "../../review/types";
 import GameReviewPanel from "../review/GameReviewPanel";
 import { clearCrsPostGame, ensureCrsState } from "../../crs/profile";
@@ -98,7 +99,16 @@ export default function ChimeraMatch() {
   const [chimeraThinking, setChimeraThinking] = useState(false);
   const [gameOver, setGameOver] = useState<string | null>(null);
   const [reviewInput, setReviewInput] = useState<GameReviewInput | null>(null);
-  const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
+  const {
+    report,
+    loading,
+    progress,
+    error: reviewError,
+    runReview,
+    dismiss,
+    abortReview,
+    failReview,
+  } = useGameReview();
 
   const engineRef = useRef<StockfishEngine | null>(null);
   /** Separate worker so live mistake analysis never blocks CHIMERA's move. */
@@ -215,23 +225,34 @@ export default function ChimeraMatch() {
     const engine = createStockfishEngine();
     reviewEngineRef.current = engine;
     let cancelled = false;
-    const timer = setInterval(() => {
-      if (cancelled || !engine.ready) return;
-      clearInterval(timer);
-      void (async () => {
-        const torch = await acquireSharedTorch();
-        if (!cancelled) void runReview(engine, reviewInput, torch);
-      })();
-    }, 120);
+
+    const stopWatch = watchReviewEngineReady(
+      engine,
+      () => {
+        if (cancelled) return;
+        void (async () => {
+          const torch = await acquireSharedTorch();
+          if (!cancelled) void runReview(engine, reviewInput, torch);
+        })();
+      },
+      () => {
+        if (!cancelled) {
+          failReview(
+            "Stockfish did not start in time — refresh the page and try again."
+          );
+        }
+      }
+    );
 
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stopWatch();
+      abortReview();
       engine.stop();
       engine.quit();
       reviewEngineRef.current = null;
     };
-  }, [reviewInput, runReview]);
+  }, [reviewInput, runReview, abortReview, failReview]);
 
   useEffect(() => {
     const onMemoryUpdate = () => setMemory(loadMemory());

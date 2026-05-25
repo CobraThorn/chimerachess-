@@ -52,6 +52,7 @@ import {
 } from "../../online/timeControls";
 import type { OnlineClock } from "../../online/types";
 import GameReviewPanel from "../review/GameReviewPanel";
+import { watchReviewEngineReady } from "../../review/reviewEngineBoot";
 import type { GameReviewInput } from "../../review/types";
 import ChimeraCalibrationMath from "./ChimeraCalibrationMath";
 import ChessBoardGrid from "./ChessBoardGrid";
@@ -149,7 +150,16 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
   const pendingMistakeAnalysesRef = useRef(0);
   const playedChimeraEloRef = useRef(0);
 
-  const { report, loading, progress, error: reviewError, runReview, dismiss } = useGameReview();
+  const {
+    report,
+    loading,
+    progress,
+    error: reviewError,
+    runReview,
+    dismiss,
+    abortReview,
+    failReview,
+  } = useGameReview();
   const [memory, setMemory] = useState(() => loadMemory());
   const [lastStoredGame, setLastStoredGame] = useState<StoredGame | null>(null);
 
@@ -323,7 +333,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
 
     const reviewEngine = createStockfishEngine();
     let cancelled = false;
-    let reviewTimer: ReturnType<typeof setInterval> | undefined;
+    let stopEngineWatch: (() => void) | undefined;
 
     void (async () => {
       await waitForPendingMistakeAnalyses(
@@ -373,22 +383,32 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         moves: g.moves,
       };
 
-      reviewTimer = setInterval(() => {
-        if (cancelled || !reviewEngine.ready) return;
-        if (reviewTimer) clearInterval(reviewTimer);
-        void (async () => {
-          const torch = await acquireSharedTorch();
-          if (!cancelled) void runReview(reviewEngine, reviewInput, torch);
-        })();
-      }, 120);
+      stopEngineWatch = watchReviewEngineReady(
+        reviewEngine,
+        () => {
+          if (cancelled) return;
+          void (async () => {
+            const torch = await acquireSharedTorch();
+            if (!cancelled) void runReview(reviewEngine, reviewInput, torch);
+          })();
+        },
+        () => {
+          if (!cancelled) {
+            failReview(
+              "Stockfish did not start in time — refresh the page and try again."
+            );
+          }
+        }
+      );
     })();
 
     return () => {
       cancelled = true;
-      if (reviewTimer) clearInterval(reviewTimer);
+      stopEngineWatch?.();
+      abortReview();
       reviewEngine.quit();
     };
-  }, [phase, result, userColor, tc, chimeraElo, runReview]);
+  }, [phase, result, userColor, tc, runReview, abortReview, failReview]);
 
   const applyUserMove = useCallback(
     (move: Move) => {
@@ -577,6 +597,8 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
           summary={crsPostGame}
           onContinue={() => {
             dismissCrsPostGame();
+            dismiss();
+            reviewStartedRef.current = false;
             endedRef.current = false;
             setPhase("playing");
             setResult(null);
@@ -606,6 +628,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         loading={loading}
         progress={progress}
         error={reviewError}
+        open={phase === "ended"}
         onClose={dismiss}
         memory={memory}
         storedGame={lastStoredGame}
