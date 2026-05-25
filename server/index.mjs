@@ -7,6 +7,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachOnlinePlay, getOnlineStats } from "./online.mjs";
+import { forwardOpenAiChat, sanitizeChatBody } from "./openai.mjs";
+import {
+  createSession,
+  ensureSessionsDir,
+  requireSession,
+  requireSessionForAccount,
+} from "./session.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Railway/Render set PORT; local dev uses CHIMERA_API_PORT or 8787 */
@@ -17,7 +24,24 @@ const PORT =
 const DATA_DIR =
   process.env.CHIMERA_DATA_DIR?.trim() ||
   path.join(__dirname, "data");
-const CORS_ORIGIN = process.env.CHIMERA_CORS_ORIGIN?.trim() || "*";
+const DEV_CORS_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+
+function parseCorsAllowlist() {
+  const raw = process.env.CHIMERA_CORS_ORIGIN?.trim();
+  if (!raw) {
+    return process.env.NODE_ENV === "production" ? [] : DEV_CORS_ORIGINS;
+  }
+  if (raw === "*") return ["*"];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const CORS_ALLOWLIST = parseCorsAllowlist();
 const ACCOUNTS_DIR = path.join(DATA_DIR, "accounts");
 const EVENTS_DIR = path.join(DATA_DIR, "events");
 const BACKUPS_DIR = path.join(DATA_DIR, "backups");
@@ -26,6 +50,7 @@ async function ensureDirs() {
   await fs.mkdir(ACCOUNTS_DIR, { recursive: true });
   await fs.mkdir(EVENTS_DIR, { recursive: true });
   await fs.mkdir(BACKUPS_DIR, { recursive: true });
+  await ensureSessionsDir(DATA_DIR);
 }
 
 const WIPE_GENERATION_FILE = path.join(__dirname, "wipe-generation.json");
@@ -44,7 +69,8 @@ async function readRequiredWipeGeneration() {
 async function wipeAllUserData() {
   await ensureDirs();
   let removed = 0;
-  for (const dir of [ACCOUNTS_DIR, EVENTS_DIR, BACKUPS_DIR]) {
+  const sessions = path.join(DATA_DIR, "sessions");
+  for (const dir of [ACCOUNTS_DIR, EVENTS_DIR, BACKUPS_DIR, sessions]) {
     const names = await fs.readdir(dir).catch(() => []);
     for (const name of names) {
       if (name.startsWith(".")) continue;
@@ -110,13 +136,23 @@ async function readBody(req) {
   return JSON.parse(text);
 }
 
-function send(res, status, data) {
-  res.writeHead(status, {
+function resolveCorsOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin || typeof origin !== "string") return null;
+  if (CORS_ALLOWLIST.includes("*")) return "*";
+  if (CORS_ALLOWLIST.includes(origin)) return origin;
+  return null;
+}
+
+function send(req, res, status, data) {
+  const headers = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": CORS_ORIGIN,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-  });
+    "Access-Control-Allow-Headers": "Content-Type, X-Chimera-Session",
+  };
+  const cors = resolveCorsOrigin(req);
+  if (cors) headers["Access-Control-Allow-Origin"] = cors;
+  res.writeHead(status, headers);
   res.end(JSON.stringify(data));
 }
 
@@ -247,7 +283,7 @@ async function saveUserBackup(accountId, save) {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
-    send(res, 204, {});
+    send(req, res, 204, {});
     return;
   }
 
@@ -255,7 +291,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "")) {
-      send(res, 200, {
+      send(req, res, 200, {
         ok: true,
         service: "chimera-data-api",
         message: "CHIMERA API is running. Use /api/chimera/health or deploy the app on Netlify.",
@@ -268,11 +304,44 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/chimera/health") {
       await ensureDirs();
       const stats = await getStats();
-      send(res, 200, {
+      send(req, res, 200, {
         ok: true,
         service: "chimera-data-api",
         stats,
         online: getOnlineStats(),
+        features: {
+          openai: !!process.env.CHIMERA_OPENAI_API_KEY?.trim(),
+          sessions: true,
+        },
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/chimera/register") {
+      await ensureDirs();
+      const body = await readBody(req);
+      const account = body.account;
+      if (!account?.id || !account?.email) {
+        send(req, res, 400, { ok: false, error: "account.id and account.email required" });
+        return;
+      }
+      sanitizeStorageId(account.id, "account.id");
+      const email = normalizeEmail(account.email);
+      if (!email) {
+        send(req, res, 400, { ok: false, error: "valid email required" });
+        return;
+      }
+      const existing = await findAccountByEmail(email);
+      if (existing && existing.id !== account.id) {
+        send(req, res, 409, { ok: false, error: "Email already registered" });
+        return;
+      }
+      const saved = await saveAccount({ ...account, email });
+      const sessionToken = await createSession(DATA_DIR, saved.id);
+      send(req, res, 200, {
+        ok: true,
+        account: publicAccountPayload(saved),
+        sessionToken,
       });
       return;
     }
@@ -282,19 +351,21 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const email = normalizeEmail(body.email);
       if (!email) {
-        send(res, 400, { ok: false, error: "email required" });
+        send(req, res, 400, { ok: false, error: "email required" });
         return;
       }
       const found = await findAccountByEmail(email);
       if (!found) {
-        send(res, 404, { ok: false, error: "Account not found" });
+        send(req, res, 404, { ok: false, error: "Account not found" });
         return;
       }
       const save = await loadUserBackup(found.id);
-      send(res, 200, {
+      const sessionToken = await createSession(DATA_DIR, found.id);
+      send(req, res, 200, {
         ok: true,
         account: publicAccountPayload(found),
         save,
+        sessionToken,
       });
       return;
     }
@@ -303,11 +374,12 @@ const server = http.createServer(async (req, res) => {
       await ensureDirs();
       const accountId = url.searchParams.get("accountId");
       if (!accountId) {
-        send(res, 400, { ok: false, error: "accountId required" });
+        send(req, res, 400, { ok: false, error: "accountId required" });
         return;
       }
+      await requireSessionForAccount(DATA_DIR, accountId, req);
       const save = await loadUserBackup(accountId);
-      send(res, 200, { ok: true, save });
+      send(req, res, 200, { ok: true, save });
       return;
     }
 
@@ -317,9 +389,10 @@ const server = http.createServer(async (req, res) => {
       const accountId = body.accountId;
       const save = body.save;
       if (!accountId || !save) {
-        send(res, 400, { ok: false, error: "accountId and save required" });
+        send(req, res, 400, { ok: false, error: "accountId and save required" });
         return;
       }
+      await requireSessionForAccount(DATA_DIR, accountId, req);
       await saveUserBackup(accountId, save);
       if (body.account) {
         await saveAccount({
@@ -335,40 +408,53 @@ const server = http.createServer(async (req, res) => {
           });
         }
       }
-      send(res, 200, { ok: true, savedAt: Date.now() });
+      send(req, res, 200, { ok: true, savedAt: Date.now() });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/chimera/openai/chat") {
+      await requireSession(DATA_DIR, req);
+      const body = await readBody(req);
+      const payload = sanitizeChatBody(body);
+      const { status, data } = await forwardOpenAiChat(payload);
+      send(req, res, status >= 400 ? status : 200, data);
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/api/chimera/admin/wipe-all") {
       if (!adminSecretOk(req)) {
-        send(res, 403, { ok: false, error: "Forbidden" });
+        send(req, res, 403, { ok: false, error: "Forbidden" });
         return;
       }
       const result = await wipeAllUserData();
-      send(res, 200, { ok: true, ...result, wipedAt: Date.now() });
+      send(req, res, 200, { ok: true, ...result, wipedAt: Date.now() });
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/api/chimera/sync") {
       await ensureDirs();
+      const session = await requireSession(DATA_DIR, req);
       const body = await readBody(req);
       const account = body.account ?? null;
       const events = body.events ?? [];
+
+      if (account?.id && account.id !== session.accountId) {
+        send(req, res, 403, { ok: false, error: "Forbidden" });
+        return;
+      }
 
       let savedAccount = null;
       if (account) {
         savedAccount = await saveAccount(account);
       }
 
-      const userId = account?.id ?? body.userId;
-      if (userId) sanitizeStorageId(userId, "userId");
-      const eventResult = userId
-        ? await appendEvents(userId, events)
-        : { appended: 0 };
+      const userId = account?.id ?? session.accountId;
+      sanitizeStorageId(userId, "userId");
+      const eventResult = await appendEvents(userId, events);
 
-      send(res, 200, {
+      send(req, res, 200, {
         ok: true,
-        accountId: savedAccount?.id ?? userId ?? null,
+        accountId: savedAccount?.id ?? userId,
         eventsReceived: events.length,
         eventsAppended: eventResult.appended,
         syncedAt: Date.now(),
@@ -376,10 +462,14 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    send(res, 404, { ok: false, error: "Not found" });
+    send(req, res, 404, { ok: false, error: "Not found" });
   } catch (err) {
     console.error(err);
-    send(res, 500, {
+    const status =
+      err && typeof err === "object" && "status" in err && typeof err.status === "number"
+        ? err.status
+        : 500;
+    send(req, res, status, {
       ok: false,
       error: err instanceof Error ? err.message : "Server error",
     });

@@ -1,5 +1,5 @@
 import { chatCompletionJson } from "../../api/gptChat";
-import { getOpenAiApiKey, hasOpenAiApiKey } from "../../api/openaiKey";
+import { hasOpenAiApiKey } from "../../api/openaiKey";
 import type { Color } from "../../chess";
 import type { LegendGame, LegendProfile } from "../../content/legends";
 import type { ReviewCoachNote } from "../../review/types";
@@ -158,8 +158,7 @@ async function fetchGptLegendNote(
   legend: LegendProfile,
   step: LegendReplayStep,
   evalPt: EvalPoint | undefined,
-  evalBefore: EvalPoint | undefined,
-  apiKey: string
+  evalBefore: EvalPoint | undefined
 ): Promise<ReviewCoachNote | null> {
   if (step.ply === 0) return null;
 
@@ -178,7 +177,6 @@ Eval before → after: ${evalBefore?.label ?? "—"} → ${evalPt?.label ?? "—
 
   const json = await chatCompletionJson<GptLegendJson>(system, user, {
     temperature: 0.45,
-    apiKey,
   });
   if (!json?.explanation) return null;
 
@@ -204,15 +202,13 @@ export async function loadLegendCoachNote(
     if (cached) return cached;
   }
 
-  const apiKey = getOpenAiApiKey();
-  if (apiKey && step.ply > 0) {
+  if (hasOpenAiApiKey() && step.ply > 0) {
     try {
       const gpt = await fetchGptLegendNote(
         legend,
         step,
         evalPt,
-        evalBefore,
-        apiKey
+        evalBefore
       );
       if (gpt) {
         writeCache(key, gpt);

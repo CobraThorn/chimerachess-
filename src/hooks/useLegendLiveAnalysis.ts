@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { evalFromResult, formatEvalLabel } from "../engine/analysis";
-import { createStockfishEngine, getEvaluation } from "../engine/stockfish";
+import { getEvaluation } from "../engine/stockfish";
 import type { StockfishEngine } from "../engine/stockfish";
+import {
+  acquireSharedStockfish,
+  releaseSharedStockfish,
+} from "../engine/stockfishPool";
+import { createStockfishEngine } from "../engine/stockfish";
 import type { LegendProfile } from "../content/legends";
 import { buildLegendReplaySteps } from "../components/legends/legendReplay";
 import {
@@ -51,8 +56,9 @@ export function useLegendLiveAnalysis(
     }
 
     let cancelled = false;
-    const engine = createStockfishEngine();
-    engineRef.current = engine;
+    let ownsEngine = false;
+    let readyPoll: ReturnType<typeof setInterval> | undefined;
+
     setEvalTimeline([]);
     setNotes(new Map());
     setEngineReady(false);
@@ -61,7 +67,7 @@ export function useLegendLiveAnalysis(
     litePlyEvalRef.current = new Map();
 
     const onVisibility = () => {
-      if (document.hidden) engine.stop();
+      if (document.hidden) engineRef.current?.stop();
     };
     document.addEventListener("visibilitychange", onVisibility);
 
@@ -93,15 +99,24 @@ export function useLegendLiveAnalysis(
       }
     };
 
-    const readyPoll = window.setInterval(() => {
-      if (cancelled) return;
-      if (engine.ready) {
-        window.clearInterval(readyPoll);
-        if (lite) markLiteReady();
+    void (async () => {
+      const engine = lite
+        ? createStockfishEngine()
+        : await acquireSharedStockfish();
+      ownsEngine = lite;
+      if (cancelled) {
+        if (ownsEngine) engine.quit();
+        else releaseSharedStockfish();
+        return;
       }
-    }, 100);
+      engineRef.current = engine;
 
-    (async () => {
+      readyPoll = setInterval(() => {
+        if (cancelled || !engine.ready) return;
+        clearInterval(readyPoll);
+        if (lite) markLiteReady();
+      }, 100);
+
       if (lite) return;
 
       const timeline: EvalPoint[] = [];
@@ -159,10 +174,13 @@ export function useLegendLiveAnalysis(
     return () => {
       cancelled = true;
       prefetchingNotes.current = false;
-      window.clearInterval(readyPoll);
+      if (readyPoll) clearInterval(readyPoll);
       document.removeEventListener("visibilitychange", onVisibility);
-      engine.stop();
-      void engine.quit();
+      if (engineRef.current) {
+        engineRef.current.stop();
+        if (ownsEngine) void engineRef.current.quit();
+        else releaseSharedStockfish();
+      }
       engineRef.current = null;
     };
   }, [legend, steps, enabled, lite, analysisDepth]);

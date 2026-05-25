@@ -1,7 +1,7 @@
 import { formatPawnAmount } from "./metricsDisplay";
 import { formatEvalLabel } from "../engine/analysis";
 import { chatCompletionJson, chatCompletionText } from "../api/gptChat";
-import { getOpenAiApiKey, hasOpenAiApiKey } from "../api/openaiKey";
+import { hasOpenAiApiKey } from "../api/openaiKey";
 import type { MistakeIntelligence } from "../mistakeIntel/types";
 import type {
   GameReviewReport,
@@ -127,7 +127,6 @@ function buildLocalNote(
 async function fetchGptNote(
   report: GameReviewReport,
   step: ReviewRecapStep,
-  apiKey: string,
   mistakeIntel?: MistakeIntelligence
 ): Promise<ReviewCoachNote | null> {
   if (step.ply === 0) return null;
@@ -165,7 +164,6 @@ Opening so far: ${report.openingLine.slice(0, 120)}${autopsy}`;
 
   const json = await chatCompletionJson<GptReviewJson>(system, user, {
     temperature: 0.45,
-    apiKey,
   });
   if (!json) return null;
 
@@ -196,13 +194,11 @@ export async function loadReviewCoachNote(
     if (cached) return cached;
   }
 
-  const apiKey = getOpenAiApiKey();
-  if (apiKey) {
+  if (hasOpenAiApiKey()) {
     try {
       const gpt = await fetchGptNote(
         report,
         step,
-        apiKey,
         options?.mistakeIntel
       );
       if (gpt?.explanation) {
@@ -222,12 +218,11 @@ export async function loadReviewCoachNote(
 export async function buildCoachSummary(
   report: GameReviewReport
 ): Promise<string> {
-  const apiKey = getOpenAiApiKey();
-  if (!apiKey) {
+  if (!hasOpenAiApiKey()) {
     return (
       report.narrative[0] ??
       `Accuracy ${report.accuracy}% — step through every move on the board. ` +
-        `Add an OpenAI key in Settings for GPT coach notes on each ply.`
+        `Sign in and enable the server coach, or add your own OpenAI key in Settings.`
     );
   }
 

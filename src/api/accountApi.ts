@@ -1,6 +1,7 @@
 import type { DataConsents, UserAccount } from "../account/types";
 import type { ChimeraSaveBundle } from "../chimeraSetup/types";
 import { resolveApiBase } from "../config/productionApi";
+import { clearSessionToken, setSessionToken } from "./session";
 
 export interface RemoteAccount {
   id: string;
@@ -13,9 +14,9 @@ export interface RemoteAccount {
   chimeraSetupComplete?: boolean;
 }
 
-function loginEndpoint(): string {
+function apiUrl(path: string): string {
   const base = resolveApiBase();
-  return base ? `${base}/api/chimera/login` : "/api/chimera/login";
+  return base ? `${base}${path}` : path;
 }
 
 async function parseBody<T>(res: Response): Promise<T | null> {
@@ -38,7 +39,7 @@ export async function fetchAccountByEmail(
   email: string
 ): Promise<LoginLookupResult | null> {
   try {
-    const res = await fetch(loginEndpoint(), {
+    const res = await fetch(apiUrl("/api/chimera/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -47,11 +48,50 @@ export async function fetchAccountByEmail(
       ok?: boolean;
       account?: RemoteAccount;
       save?: ChimeraSaveBundle;
+      sessionToken?: string;
     }>(res);
     if (!res.ok || !data?.ok || !data.account?.id) return null;
+    if (data.sessionToken) setSessionToken(data.sessionToken);
     return { account: data.account, save: data.save ?? null };
   } catch {
     return null;
+  }
+}
+
+export async function registerAccountRemote(
+  account: Pick<
+    UserAccount,
+    | "id"
+    | "email"
+    | "phone"
+    | "displayName"
+    | "createdAt"
+    | "lastLoginAt"
+    | "consents"
+    | "chimeraSetupComplete"
+  >
+): Promise<{ ok: boolean; sessionToken?: string; error?: string }> {
+  try {
+    const res = await fetch(apiUrl("/api/chimera/register"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account }),
+    });
+    const data = await parseBody<{
+      ok?: boolean;
+      sessionToken?: string;
+      error?: string;
+    }>(res);
+    if (!res.ok || !data?.ok) {
+      return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+    }
+    if (data.sessionToken) setSessionToken(data.sessionToken);
+    return { ok: true, sessionToken: data.sessionToken };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Network error",
+    };
   }
 }
 
@@ -74,4 +114,9 @@ export function remoteToUserAccount(
     isLoggedIn: loggedIn,
     chimeraSetupComplete: remote.chimeraSetupComplete === true,
   };
+}
+
+/** Clear cloud session (sign-out). */
+export function revokeCloudSession(): void {
+  clearSessionToken();
 }

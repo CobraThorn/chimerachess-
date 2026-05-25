@@ -1,37 +1,60 @@
-import { getOpenAiApiKey } from "./openaiKey";
+import { resolveApiBase } from "../config/productionApi";
+import { getByokOpenAiKey } from "./openaiKey";
+import { sessionHeaders } from "./session";
 
-export function openAiChatUrl(): string {
+function chimeraOpenAiUrl(): string {
+  const base = resolveApiBase();
+  return base
+    ? `${base}/api/chimera/openai/chat`
+    : "/api/chimera/openai/chat";
+}
+
+function byokOpenAiUrl(): string {
   return import.meta.env.DEV
     ? "/api/openai/v1/chat/completions"
     : "https://api.openai.com/v1/chat/completions";
 }
 
-export async function chatCompletionJson<T>(
-  system: string,
-  user: string,
-  options?: { temperature?: number; apiKey?: string }
-): Promise<T | null> {
-  const apiKey = options?.apiKey ?? getOpenAiApiKey();
-  if (!apiKey) return null;
+async function postChat(
+  body: Record<string, unknown>
+): Promise<Response | null> {
+  const byok = getByokOpenAiKey();
+  if (byok) {
+    return fetch(byokOpenAiUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${byok}`,
+      },
+      body: JSON.stringify(body),
+    });
+  }
 
-  const res = await fetch(openAiChatUrl(), {
+  return fetch(chimeraOpenAiUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      ...sessionHeaders(),
     },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: options?.temperature ?? 0.45,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
+}
 
-  if (!res.ok) return null;
+export async function chatCompletionJson<T>(
+  system: string,
+  user: string,
+  options?: { temperature?: number }
+): Promise<T | null> {
+  const res = await postChat({
+    model: "gpt-4o-mini",
+    temperature: options?.temperature ?? 0.45,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+  if (!res?.ok) return null;
 
   const data = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
@@ -51,26 +74,15 @@ export async function chatCompletionText(
   user: string,
   options?: { temperature?: number }
 ): Promise<string | null> {
-  const apiKey = getOpenAiApiKey();
-  if (!apiKey) return null;
-
-  const res = await fetch(openAiChatUrl(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: options?.temperature ?? 0.5,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
+  const res = await postChat({
+    model: "gpt-4o-mini",
+    temperature: options?.temperature ?? 0.5,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
   });
-
-  if (!res.ok) return null;
+  if (!res?.ok) return null;
   const data = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
   };

@@ -15,7 +15,7 @@ export interface UserAccount {
   createdAt: number;
   lastLoginAt: number;
   consents: DataConsents;
-  /** Local session — no server auth yet */
+  /** Local session flag */
   isLoggedIn: boolean;
   /** Finished "Customise your CHIMERA" onboarding */
   chimeraSetupComplete?: boolean;

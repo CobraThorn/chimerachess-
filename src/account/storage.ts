@@ -1,3 +1,4 @@
+import { revokeCloudSession } from "../api/accountApi";
 import { scheduleSync } from "../api/chimeraBackend";
 import { setDisplayName } from "../components/profile/profileUtils";
 import type {
@@ -61,6 +62,7 @@ export function hasCompletedChimeraSetup(): boolean {
 }
 
 export function signOut(): void {
+  revokeCloudSession();
   const account = loadAccount();
   if (account) {
     saveAccount({ ...account, isLoggedIn: false });

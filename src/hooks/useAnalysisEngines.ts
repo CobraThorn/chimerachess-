@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { createAnalysisEngine, listAvailableEngines } from "../engine/registry";
 import type { ChessEngine, EngineDescriptor } from "../engine/types";
+import {
+  acquireSharedStockfish,
+  releaseSharedStockfish,
+} from "../engine/stockfishPool";
 
 export function useAnalysisEngines() {
   const [descriptors, setDescriptors] = useState<EngineDescriptor[]>([]);
@@ -12,44 +16,41 @@ export function useAnalysisEngines() {
 
   useEffect(() => {
     let cancelled = false;
-    const sf = createAnalysisEngine("stockfish");
-    setStockfish(sf);
     setEngineError(null);
 
     void listAvailableEngines().then((list) => {
       if (!cancelled) setDescriptors(list);
     });
 
-    const deadline = Date.now() + 20_000;
-    const t = setInterval(() => {
-      if (cancelled) return;
-      if (sf.ready) {
+    void acquireSharedStockfish()
+      .then((sf) => {
+        if (cancelled) return;
+        setStockfish(sf);
         setSfReady(true);
-        clearInterval(t);
-        return;
-      }
-      if (sf.loadFailed || Date.now() > deadline) {
-        clearInterval(t);
-        setEngineError(
-          "Stockfish failed to load — hard-refresh or check /stockfish/ assets."
-        );
-      }
-    }, 100);
-
-    const onVisibility = () => {
-      if (document.hidden) sf.stop();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEngineError(
+            "Stockfish failed to load — hard-refresh or check /stockfish/ assets."
+          );
+        }
+      });
 
     return () => {
       cancelled = true;
-      clearInterval(t);
-      document.removeEventListener("visibilitychange", onVisibility);
-      sf.quit();
+      releaseSharedStockfish();
       setStockfish(null);
       setSfReady(false);
     };
   }, []);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) stockfish?.stop();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [stockfish]);
 
   const ensureTorch = useCallback(async () => {
     if (torch?.ready) return torch;

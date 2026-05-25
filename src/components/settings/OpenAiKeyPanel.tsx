@@ -1,13 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  getOpenAiApiKey,
+  getByokOpenAiKey,
   hasOpenAiApiKey,
+  probeServerOpenAiCoach,
   setOpenAiApiKey,
+  usesServerOpenAiCoach,
 } from "../../api/openaiKey";
 
 export default function OpenAiKeyPanel() {
-  const [key, setKey] = useState(() => getOpenAiApiKey() ?? "");
+  const [key, setKey] = useState(() => getByokOpenAiKey() ?? "");
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    void probeServerOpenAiCoach();
+  }, []);
 
   const save = () => {
     setOpenAiApiKey(key);
@@ -21,8 +27,10 @@ export default function OpenAiKeyPanel() {
         ChatGPT coach
       </h3>
       <p className="mt-2 max-w-xl font-[family-name:var(--font-body)] text-sm text-[rgba(255,255,255,0.45)]">
-        Optional. Adds richer move explanations in opening training. Your key is stored
-        only on this device and is never sent to CHIMERA servers.
+        Optional bring-your-own-key. When the host sets{" "}
+        <span className="font-mono text-[rgba(255,255,255,0.55)]">CHIMERA_OPENAI_API_KEY</span>
+        , coach features use the server proxy while you are signed in. A personal key
+        stays on this device only.
       </p>
       <div className="mt-4 flex max-w-md flex-col gap-3 sm:flex-row sm:items-end">
         <label className="flex-1">
@@ -48,9 +56,11 @@ export default function OpenAiKeyPanel() {
       </div>
       <p className="mt-2 font-[family-name:var(--font-hud)] text-[8px] text-[rgba(255,255,255,0.25)]">
         Status:{" "}
-        {hasOpenAiApiKey()
-          ? "Connected — game review & opening coach use GPT"
-          : "Not set — local coach notes only"}
+        {usesServerOpenAiCoach()
+          ? "Server coach enabled (signed-in sessions)"
+          : hasOpenAiApiKey()
+            ? "BYOK connected — GPT coach active"
+            : "Not set — local coach notes only"}
       </p>
     </div>
   );

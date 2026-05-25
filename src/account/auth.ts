@@ -1,4 +1,8 @@
-import { fetchAccountByEmail, remoteToUserAccount } from "../api/accountApi";
+import {
+  fetchAccountByEmail,
+  registerAccountRemote,
+  remoteToUserAccount,
+} from "../api/accountApi";
 import { scheduleSync } from "../api/chimeraBackend";
 import { fetchUserBackup } from "../api/saveBackup";
 import { restoreSaveForAccount } from "../chimeraSetup/backup";
@@ -44,7 +48,11 @@ export async function loginByEmail(email: string): Promise<AuthResult> {
   if (local && normalizeEmail(local.email) === norm) {
     const account = activeSession(local);
     saveAccount(account);
-    await restoreCloudSave(account.id);
+    const cloud = await fetchAccountByEmail(norm);
+    if (!cloud) {
+      await registerAccountRemote(account);
+    }
+    await restoreCloudSave(account.id, cloud?.save);
     scheduleSync(800);
     return {
       ok: true,
@@ -152,6 +160,7 @@ export async function registerUser(input: {
     displayName: input.displayName,
     consents: input.consents,
   });
+  await registerAccountRemote(account);
   return {
     ok: true,
     account,

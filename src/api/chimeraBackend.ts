@@ -3,6 +3,7 @@ import type { DataCollectionEvent, UserAccount } from "../account/types";
 import { ACCOUNT_EVENT } from "../account/types";
 import { resolveApiBase } from "../config/productionApi";
 import { friendlyCloudError } from "../utils/userFacingError";
+import { getSessionToken, sessionHeaders } from "./session";
 
 const SYNC_QUEUE_KEY = "chimera-sync-queue-v3";
 const SYNC_META_KEY = "chimera-sync-meta-v3";
@@ -126,6 +127,9 @@ export async function syncToBackend(): Promise<SyncResult> {
   if (!account) {
     return { ok: false, error: "No account — register first." };
   }
+  if (!getSessionToken()) {
+    return { ok: false, error: "Sign in again to refresh your cloud session." };
+  }
 
   const store = loadDataEvents();
   const queue = loadQueue();
@@ -141,7 +145,10 @@ export async function syncToBackend(): Promise<SyncResult> {
   try {
     const res = await fetch(syncEndpoint(), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...sessionHeaders(),
+      },
       body: JSON.stringify({
         account: accountPayload(account),
         events,

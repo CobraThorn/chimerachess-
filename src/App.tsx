@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { probeServerOpenAiCoach } from "./api/openaiKey";
 import { ACCOUNT_EVENT } from "./account/types";
 import {
   hasCompletedChimeraSetup,
@@ -26,6 +27,7 @@ export default function App() {
 
   useEffect(() => {
     refreshGates();
+    void probeServerOpenAiCoach();
     const onAccount = () => refreshGates();
     const onSetup = () => refreshGates();
     const openSetup = () => {

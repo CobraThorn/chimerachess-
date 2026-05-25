@@ -4,7 +4,8 @@ import { computeControlHeat, emphasizeMoveHeat } from "../chess/heatMap";
 import { parseSquare } from "../chess/square";
 import type { OpeningLine } from "../content/openings";
 import type { BoardArrow, ArrowColor } from "../components/chess/BoardAnnotations";
-import { getOpenAiApiKey, hasOpenAiApiKey } from "./openaiKey";
+import { chatCompletionJson } from "./gptChat";
+import { hasOpenAiApiKey } from "./openaiKey";
 import { findBookMove, applyUciLine } from "../components/train/openingUtils";
 
 export interface CoachInsight {
@@ -225,8 +226,7 @@ function parseGptInsight(
 
 async function fetchGptCoachInsight(
   opening: OpeningLine,
-  ply: number,
-  apiKey: string
+  ply: number
 ): Promise<CoachInsight | null> {
   if (ply < 0 || ply >= opening.moves.length) return null;
 
@@ -254,39 +254,10 @@ FEN before move: ${fen}
 Move to explain: ${san} (${uci})
 ${opening.tagline}`;
 
-  const baseUrl = import.meta.env.DEV
-    ? "/api/openai/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
-
-  const res = await fetch(baseUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.4,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
+  const json = await chatCompletionJson<GptCoachJson>(system, user, {
+    temperature: 0.4,
   });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err || `OpenAI ${res.status}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty GPT response");
-
-  const json = JSON.parse(content) as GptCoachJson;
+  if (!json) throw new Error("Coach request failed");
   return parseGptInsight(json, opening, ply);
 }
 
@@ -299,10 +270,9 @@ export async function loadCoachInsight(
   const cached = readCache(key);
   if (cached?.source === "gpt") return cached;
 
-  const apiKey = getOpenAiApiKey();
-  if (apiKey) {
+  if (hasOpenAiApiKey()) {
     try {
-      const gpt = await fetchGptCoachInsight(opening, ply, apiKey);
+      const gpt = await fetchGptCoachInsight(opening, ply);
       if (gpt) {
         writeCache(key, gpt);
         return gpt;

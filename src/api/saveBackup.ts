@@ -1,6 +1,7 @@
 import { resolveApiBase } from "../config/productionApi";
 import type { ChimeraSaveBundle } from "../chimeraSetup/types";
 import type { UserAccount } from "../account/types";
+import { sessionHeaders } from "./session";
 
 function backupEndpoint(): string {
   const base = resolveApiBase();
@@ -23,7 +24,7 @@ export async function fetchUserBackup(
   try {
     const res = await fetch(
       `${backupEndpoint()}?accountId=${encodeURIComponent(accountId)}`,
-      { method: "GET" }
+      { method: "GET", headers: sessionHeaders() }
     );
     const data = await parseBody<{ ok?: boolean; save?: ChimeraSaveBundle }>(res);
     if (!res.ok || !data?.ok || !data.save) return null;
@@ -36,12 +37,25 @@ export async function fetchUserBackup(
 export async function uploadUserBackup(
   accountId: string,
   save: ChimeraSaveBundle,
-  account?: Pick<UserAccount, "id" | "email" | "phone" | "displayName" | "createdAt" | "lastLoginAt" | "consents" | "chimeraSetupComplete">
+  account?: Pick<
+    UserAccount,
+    | "id"
+    | "email"
+    | "phone"
+    | "displayName"
+    | "createdAt"
+    | "lastLoginAt"
+    | "consents"
+    | "chimeraSetupComplete"
+  >
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(backupEndpoint(), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...sessionHeaders(),
+      },
       body: JSON.stringify({
         accountId,
         save,

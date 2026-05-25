@@ -67,6 +67,7 @@ export function createUciWorkerEngine(scriptUrl: string): ChessEngine {
   };
 
   const sendRaw = (cmd: string) => worker.postMessage(cmd);
+  let sendChain: Promise<void> = Promise.resolve();
 
   const engine: ChessEngine = {
     get ready() {
@@ -86,12 +87,27 @@ export function createUciWorkerEngine(scriptUrl: string): ChessEngine {
         trimmed.startsWith("position") ||
         trimmed.startsWith("setoption");
 
-      if (!noReply) {
-        queue.push({ cmd: trimmed, lines: [], onComplete, done: false });
-      }
+      const run = (): Promise<void> => {
+        if (!noReply) {
+          return new Promise((resolve) => {
+            queue.push({
+              cmd: trimmed,
+              lines: [],
+              onComplete: (out) => {
+                onComplete?.(out);
+                resolve();
+              },
+              done: false,
+            });
+            sendRaw(trimmed);
+          });
+        }
+        sendRaw(trimmed);
+        if (onComplete) setTimeout(() => onComplete(""), 0);
+        return Promise.resolve();
+      };
 
-      sendRaw(trimmed);
-      if (noReply && onComplete) setTimeout(() => onComplete(""), 0);
+      sendChain = sendChain.then(run).catch(() => run());
     },
 
     onLine(cb) {
