@@ -19,7 +19,7 @@ services:
         value: production
       # Your live site origin (required for browser API + WebSocket from Netlify)
       - key: CHIMERA_CORS_ORIGIN
-        value: https://chimerachess.co.uk
+        value: https://chimerachess.co.uk,https://www.chimerachess.co.uk
     disk:
       name: chimera-data
       mountPath: /opt/render/project/src/server/data

@@ -12,6 +12,7 @@ const cases: [string, string][] = [
   ["login", "/login"],
   ["/api/chimera/login", "/login"],
   ["/api/chimera/api/chimera/register", "/register"],
+  ["/api/register", "/register"],
   ["/register/", "/register"],
 ];
 
@@ -44,6 +45,10 @@ assert(
   buildUrl("https://example.onrender.com", "/api/chimera/login") ===
     "https://example.onrender.com/api/chimera/login",
   "full path endpoint deduped"
+);
+assert(
+  buildUrl("", "/api/register") === `${CHIMERA_API_PREFIX}/register`,
+  "legacy /api/register normalized"
 );
 
 console.log("api client URL tests passed");

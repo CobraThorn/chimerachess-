@@ -14,7 +14,7 @@ import {
   signOut,
   storedAccountEmail,
   updateAccount,
-  EMPTY_CONSENTS,
+  REGISTER_CONSENTS,
   type DataConsents,
 } from "../../account";
 import {
@@ -102,7 +102,7 @@ export default function AccountDataSection() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [consents, setConsents] = useState<DataConsents>({ ...EMPTY_CONSENTS });
+  const [consents, setConsents] = useState<DataConsents>({ ...REGISTER_CONSENTS });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editContact, setEditContact] = useState(false);

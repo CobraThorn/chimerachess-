@@ -1,6 +1,6 @@
 import type { DataConsents, UserAccount } from "../account/types";
 import type { ChimeraSaveBundle } from "../chimeraSetup/types";
-import { chimeraFetch, parseJsonResponse } from "./client";
+import { chimeraFetch } from "./client";
 import { clearSessionToken, setSessionToken } from "./session";
 
 export interface RemoteAccount {
@@ -19,6 +19,43 @@ export interface LoginLookupResult {
   save: ChimeraSaveBundle | null;
 }
 
+function isHtmlResponse(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return t.startsWith("<!doctype") || t.startsWith("<html");
+}
+
+async function readApiJson<T>(res: Response): Promise<{
+  data: T | null;
+  html: boolean;
+}> {
+  const text = await res.text();
+  if (!text.trim()) return { data: null, html: false };
+  if (isHtmlResponse(text)) return { data: null, html: true };
+  try {
+    return { data: JSON.parse(text) as T, html: false };
+  } catch {
+    return { data: null, html: false };
+  }
+}
+
+function apiErrorMessage(
+  res: Response,
+  data: { error?: string } | null,
+  html = false
+): string {
+  if (html || (res.status === 404 && !data?.error)) {
+    return "Account API not reachable (wrong URL). Hard-refresh (Ctrl+Shift+R) and try again.";
+  }
+  if (data?.error) return data.error;
+  if (res.status === 404) {
+    return "Account service not found. Hard-refresh the page and try again.";
+  }
+  if (res.status >= 500) {
+    return "Server is waking up — wait a moment and try again.";
+  }
+  return "Could not reach the account server. Try again.";
+}
+
 /** Cloud sign-in with email + password (new device or after local register). */
 export async function loginRemote(
   email: string,
@@ -30,13 +67,13 @@ export async function loginRemote(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const data = await parseJsonResponse<{
+    const { data, html } = await readApiJson<{
       ok?: boolean;
       account?: RemoteAccount;
       save?: ChimeraSaveBundle;
       sessionToken?: string;
     }>(res);
-    if (!res.ok || !data?.ok || !data.account?.id) return null;
+    if (html || !res.ok || !data?.ok || !data.account?.id) return null;
     if (data.sessionToken) setSessionToken(data.sessionToken);
     return { account: data.account, save: data.save ?? null };
   } catch {
@@ -57,23 +94,33 @@ export async function registerAccountRemote(
     | "chimeraSetupComplete"
   >,
   password: string
-): Promise<{ ok: boolean; sessionToken?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  sessionToken?: string;
+  account?: RemoteAccount;
+  error?: string;
+}> {
   try {
     const res = await chimeraFetch("/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ account, password }),
     });
-    const data = await parseJsonResponse<{
+    const { data, html } = await readApiJson<{
       ok?: boolean;
       sessionToken?: string;
+      account?: RemoteAccount;
       error?: string;
     }>(res);
     if (!res.ok || !data?.ok) {
-      return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+      return { ok: false, error: apiErrorMessage(res, data, html) };
     }
     if (data.sessionToken) setSessionToken(data.sessionToken);
-    return { ok: true, sessionToken: data.sessionToken };
+    return {
+      ok: true,
+      sessionToken: data.sessionToken,
+      account: data.account,
+    };
   } catch (e) {
     return {
       ok: false,

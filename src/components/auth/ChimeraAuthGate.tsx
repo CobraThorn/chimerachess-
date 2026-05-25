@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import {
-  EMPTY_CONSENTS,
+  REGISTER_CONSENTS,
   hasStoredAccount,
   logDataEvent,
   loginWithPassword,
@@ -108,7 +108,7 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
   const [email, setEmail] = useState(() => storedAccountEmail() ?? "");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [consents, setConsents] = useState<DataConsents>({ ...EMPTY_CONSENTS });
+  const [consents, setConsents] = useState<DataConsents>({ ...REGISTER_CONSENTS });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -121,34 +121,44 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
   const handleRegister = async () => {
     setError(null);
     setAuthBusy(true);
-    const result = await registerUser({
-      email,
-      password,
-      phone: null,
-      displayName: displayName.trim() || "Player",
-      consents,
-    });
-    setAuthBusy(false);
-    if (!result.ok) {
-      setError(friendlyCloudError(result.error));
-      return;
+    try {
+      const result = await registerUser({
+        email,
+        password,
+        phone: null,
+        displayName: displayName.trim() || "Player",
+        consents,
+      });
+      if (!result.ok) {
+        setError(friendlyCloudError(result.error));
+        return;
+      }
+      logDataEvent("sign_up", { analytics: consents.analytics });
+      onAuthenticated();
+    } catch {
+      setError("Something went wrong. Try again.");
+    } finally {
+      setAuthBusy(false);
     }
-    logDataEvent("sign_up", { analytics: consents.analytics });
-    onAuthenticated();
   };
 
   const handleSignIn = async () => {
     setError(null);
     setAuthBusy(true);
-    const result = await loginWithPassword(email, password);
-    setAuthBusy(false);
-    if (!result.ok) {
-      setError(friendlyCloudError(result.error));
-      if (result.error.includes("Register")) setTab("register");
-      return;
+    try {
+      const result = await loginWithPassword(email, password);
+      if (!result.ok) {
+        setError(friendlyCloudError(result.error));
+        if (result.error.includes("Register")) setTab("register");
+        return;
+      }
+      logDataEvent("sign_in");
+      onAuthenticated();
+    } catch {
+      setError("Something went wrong. Try again.");
+    } finally {
+      setAuthBusy(false);
     }
-    logDataEvent("sign_in");
-    onAuthenticated();
   };
 
   return (

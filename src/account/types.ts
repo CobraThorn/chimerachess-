@@ -60,3 +60,10 @@ export const EMPTY_CONSENTS: DataConsents = {
   marketing: false,
   cognitiveResearch: false,
 };
+
+/** Defaults on the register form — analytics is required to create an account. */
+export const REGISTER_CONSENTS: DataConsents = {
+  analytics: true,
+  marketing: false,
+  cognitiveResearch: false,
+};

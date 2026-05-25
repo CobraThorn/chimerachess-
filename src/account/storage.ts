@@ -70,6 +70,12 @@ export function signOut(): void {
   emitAccountUpdate();
 }
 
+/** Remove local account record (e.g. after failed cloud registration). */
+export function clearLocalAccount(): void {
+  localStorage.removeItem(ACCOUNT_STORAGE_KEY);
+  emitAccountUpdate();
+}
+
 export function registerAccount(input: {
   email: string;
   phone: string | null;

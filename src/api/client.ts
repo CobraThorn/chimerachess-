@@ -25,6 +25,11 @@ export function normalizeChimeraEndpoint(endpoint: string): string {
     path = path.slice(CHIMERA_API_PREFIX.length) || "/";
     if (!path.startsWith("/")) path = `/${path}`;
   }
+  // Legacy mistaken paths like /api/register → /register
+  if (path.startsWith("/api/")) {
+    path = path.slice(4) || "/";
+    if (!path.startsWith("/")) path = `/${path}`;
+  }
   if (path.length > 1) path = path.replace(/\/+$/, "");
   return path;
 }
@@ -35,7 +40,14 @@ export function chimeraApiUrl(
 ): string {
   const path = `${CHIMERA_API_PREFIX}${normalizeChimeraEndpoint(endpoint)}`;
   const base = resolveApiBase();
-  let url = base ? `${base.replace(/\/+$/, "")}${path}` : path;
+  let url: string;
+  if (base) {
+    url = `${base.replace(/\/+$/, "")}${path}`;
+  } else if (typeof window !== "undefined") {
+    url = new URL(path, window.location.origin).href;
+  } else {
+    url = path;
+  }
   url = url.replace(/([^:]\/)\/+/g, "$1");
   if (query) {
     const params = new URLSearchParams();
@@ -58,13 +70,40 @@ export async function parseJsonResponse<T>(res: Response): Promise<T | null> {
   }
 }
 
+const RETRYABLE_STATUS = new Set([502, 503, 504, 429]);
+const AUTH_ENDPOINTS = new Set(["/login", "/register"]);
+
+function retryDelayMs(attempt: number): number {
+  return 2000 * (attempt + 1);
+}
+
 /** All CHIMERA backend HTTP calls must use this (auth, sync, backup, game API, …). */
 export async function chimeraFetch(
   endpoint: string,
   init?: RequestInit,
   query?: Record<string, string | number | undefined>
 ): Promise<Response> {
-  return fetch(chimeraApiUrl(endpoint, query), init);
+  const path = normalizeChimeraEndpoint(endpoint);
+  const maxAttempts = AUTH_ENDPOINTS.has(path) ? 3 : 1;
+  const url = chimeraApiUrl(endpoint, query);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (!RETRYABLE_STATUS.has(res.status) || attempt === maxAttempts - 1) {
+        return res;
+      }
+    } catch (e) {
+      lastError = e;
+      if (attempt === maxAttempts - 1) throw e;
+    }
+    await new Promise((r) => setTimeout(r, retryDelayMs(attempt)));
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Network error");
 }
 
 export function chimeraWsUrl(): string {

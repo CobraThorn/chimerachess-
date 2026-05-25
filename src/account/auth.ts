@@ -2,6 +2,7 @@ import {
   loginRemote,
   registerAccountRemote,
   remoteToUserAccount,
+  revokeCloudSession,
 } from "../api/accountApi";
 import { scheduleSync } from "../api/chimeraBackend";
 import { fetchUserBackup } from "../api/saveBackup";
@@ -9,6 +10,7 @@ import { restoreSaveForAccount } from "../chimeraSetup/backup";
 import type { ChimeraSaveBundle } from "../chimeraSetup/types";
 import { isValidEmail, isValidPassword, normalizeEmail } from "./validation";
 import {
+  clearLocalAccount,
   loadAccount,
   saveAccount,
   signOut,
@@ -27,6 +29,13 @@ function activeSession(account: UserAccount): UserAccount {
   };
 }
 
+function newAccountId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `u${Date.now()}${Math.random().toString(36).slice(2, 11)}`;
+}
+
 function buildAccountRecord(input: {
   email: string;
   phone: string | null;
@@ -38,7 +47,7 @@ function buildAccountRecord(input: {
 }): UserAccount {
   const now = Date.now();
   return {
-    id: input.id ?? crypto.randomUUID(),
+    id: input.id ?? newAccountId(),
     email: input.email,
     phone: input.phone,
     displayName: input.displayName.trim() || "Player",
@@ -181,26 +190,6 @@ export async function registerUser(input: {
     };
   }
 
-  const lookup = await loginRemote(norm, pw.password);
-  if (lookup) {
-    const session = commitSession(
-      {
-        ...remoteToUserAccount(lookup.account),
-        phone: input.phone,
-        displayName:
-          input.displayName.trim() || lookup.account.displayName || "Player",
-        consents: input.consents,
-      },
-      lookup.save
-    );
-    return {
-      ok: true,
-      account: session,
-      message:
-        "Welcome back — we found your account in the cloud and signed you in.",
-    };
-  }
-
   const account = local
     ? {
         ...local,
@@ -218,14 +207,27 @@ export async function registerUser(input: {
 
   const cloud = await registerAccountRemote(account, pw.password);
   if (!cloud.ok) {
-    signOut();
+    revokeCloudSession();
+    if (local) signOut();
+    else clearLocalAccount();
     return {
       ok: false,
       error: cloud.error ?? "Could not create cloud account. Try again.",
     };
   }
 
-  const session = commitSession(account);
+  const registered = cloud.account
+    ? {
+        ...account,
+        ...remoteToUserAccount(cloud.account, false),
+        phone: input.phone,
+        displayName:
+          input.displayName.trim() || cloud.account.displayName || "Player",
+        consents: input.consents,
+      }
+    : account;
+
+  const session = commitSession(registered);
   return {
     ok: true,
     account: session,

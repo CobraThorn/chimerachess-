@@ -10,8 +10,33 @@
 
 # Proxy API to Render (before SPA fallback).
 [[redirects]]
+  from = "/api/chimera/register"
+  to = "https://chimerachess-0so2.onrender.com/api/chimera/register"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/chimera/login"
+  to = "https://chimerachess-0so2.onrender.com/api/chimera/login"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/chimera/*"
   to = "https://chimerachess-0so2.onrender.com/api/chimera/:splat"
+  status = 200
+  force = true
+
+# Legacy wrong paths (old clients) → correct API routes
+[[redirects]]
+  from = "/api/register"
+  to = "https://chimerachess-0so2.onrender.com/api/chimera/register"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/login"
+  to = "https://chimerachess-0so2.onrender.com/api/chimera/login"
   status = 200
   force = true
 
