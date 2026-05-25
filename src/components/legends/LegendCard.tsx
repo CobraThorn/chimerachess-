@@ -42,12 +42,14 @@ function LegendPortrait({
             setFailed(true);
             return;
           }
-          const thumb = legend.imageUrl.replace(
-            /\/commons\/([^/]+\/[^/]+)$/,
-            "/commons/thumb/$1/440px-$1"
+          const m = legend.imageUrl.match(
+            /^(https:\/\/upload\.wikimedia\.org\/wikipedia\/commons)\/(.+\/)([^/]+)$/
           );
-          if (thumb !== legend.imageUrl) setSrc(thumb);
-          else setFailed(true);
+          if (m) {
+            setSrc(`${m[1]}/thumb/${m[2]}${m[3]}/440px-${m[3]}`);
+          } else {
+            setFailed(true);
+          }
         }}
         className="aspect-[4/5] w-full rounded-sm object-cover object-top shadow-lg ring-1 ring-[rgba(232,197,71,0.15)]"
       />
