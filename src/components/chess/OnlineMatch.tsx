@@ -17,10 +17,10 @@ import {
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
 import ChessBoardGrid from "./ChessBoardGrid";
 import ChessPiece from "./ChessPiece";
-import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
 import { finishGame, loadMemory, saveMemory } from "../../ai";
+import { ensureCrsState } from "../../crs/profile";
 import { CHIMERA_MEMORY_EVENT, type ChimeraMemory, type StoredGame } from "../../ai/types";
 import { onlineMovesToRecords } from "../../review/buildGameReview";
 import { watchReviewEngineReady } from "../../review/reviewEngineBoot";
@@ -135,7 +135,9 @@ export default function OnlineMatch({
 
     const mem = loadMemory();
     const mode = tcToCrsMode(match.tc);
-    const next = finishGame(mem, stored, { mode, opponentRating: 1200 });
+    const crs = ensureCrsState(mem);
+    const opponentRating = crs.modeRatings[mode] ?? crs.chimeraRating;
+    const next = finishGame(mem, stored, { mode, opponentRating });
     saveMemory(next);
     setMemory(next);
     setStoredGame(stored);
@@ -162,9 +164,7 @@ export default function OnlineMatch({
       engine,
       () => {
         if (cancelled) return;
-        void acquireSharedTorch().then((torch) => {
-          if (!cancelled) void runReview(engine, reviewInput, torch);
-        });
+        if (!cancelled) void runReview(engine, reviewInput);
       },
       () => {
         if (!cancelled) {
@@ -216,6 +216,20 @@ export default function OnlineMatch({
     }
   }, [match.fen]);
 
+  const lastServerFenRef = useRef(match.fen);
+  lastServerFenRef.current = match.fen;
+
+  useEffect(() => {
+    if (!client.error) return;
+    const next = fromFen(lastServerFenRef.current);
+    if (next) {
+      setState(next);
+      setSelected(null);
+      setLegalTargets([]);
+      setPromotionPick(null);
+    }
+  }, [client.error]);
+
   const turn = state.turn;
   const userTurn = turn === userColor;
   const status = getGameStatus(state);
@@ -225,8 +239,14 @@ export default function OnlineMatch({
     match.turnStartedAt
   );
 
+  const canPlay =
+    client.connected &&
+    client.phase === "playing" &&
+    !client.error;
+
   const applyLocalMove = useCallback(
     (move: Move) => {
+      if (!canPlay) return;
       const next = makeMove(state, move);
       if (!next) return;
       const uci = moveToUci(move);
@@ -237,12 +257,12 @@ export default function OnlineMatch({
       setPromotionPick(null);
       onSendMove(uci);
     },
-    [state, onSendMove]
+    [state, onSendMove, canPlay]
   );
 
   const onPiecePress = useCallback(
     (sq: Square) => {
-      if (!userTurn || client.phase !== "playing" || promotionPick) return;
+      if (!userTurn || !canPlay || promotionPick) return;
       const piece = state.board[sq];
       if (!piece || piece.color !== userColor) return;
       if (selected === sq && legalTargets.length > 0) return;
@@ -261,7 +281,7 @@ export default function OnlineMatch({
   );
 
   const onSquareClick = (sq: Square) => {
-    if (!userTurn || client.phase !== "playing") return;
+    if (!userTurn || !canPlay) return;
     if (promotionPick) return;
 
     const piece = state.board[sq];

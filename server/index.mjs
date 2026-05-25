@@ -14,6 +14,11 @@ import {
   requireSession,
   requireSessionForAccount,
 } from "./session.mjs";
+import {
+  hashPassword,
+  validatePassword,
+  verifyPassword,
+} from "./password.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Railway/Render set PORT; local dev uses CHIMERA_API_PORT or 8787 */
@@ -133,7 +138,13 @@ async function readBody(req) {
   }
   const text = Buffer.concat(chunks).toString("utf8");
   if (!text) return {};
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch {
+    const err = new Error("Invalid JSON body");
+    err.status = 400;
+    throw err;
+  }
 }
 
 function resolveCorsOrigin(req) {
@@ -325,6 +336,11 @@ const server = http.createServer(async (req, res) => {
         send(req, res, 400, { ok: false, error: "account.id and account.email required" });
         return;
       }
+      const pw = validatePassword(body.password);
+      if (!pw.ok) {
+        send(req, res, 400, { ok: false, error: pw.error });
+        return;
+      }
       sanitizeStorageId(account.id, "account.id");
       const email = normalizeEmail(account.email);
       if (!email) {
@@ -336,7 +352,24 @@ const server = http.createServer(async (req, res) => {
         send(req, res, 409, { ok: false, error: "Email already registered" });
         return;
       }
-      const saved = await saveAccount({ ...account, email });
+      if (
+        existing?.passwordHash &&
+        !verifyPassword(pw.password, existing.passwordHash)
+      ) {
+        send(req, res, 401, {
+          ok: false,
+          error: "Wrong password for this email. Sign in instead.",
+        });
+        return;
+      }
+      const passwordHash = hashPassword(pw.password);
+      const saved = await saveAccount({
+        ...existing,
+        ...account,
+        email,
+        passwordHash,
+        lastLoginAt: Date.now(),
+      });
       const sessionToken = await createSession(DATA_DIR, saved.id);
       send(req, res, 200, {
         ok: true,
@@ -354,12 +387,30 @@ const server = http.createServer(async (req, res) => {
         send(req, res, 400, { ok: false, error: "email required" });
         return;
       }
+      const pw = validatePassword(body.password);
+      if (!pw.ok) {
+        send(req, res, 400, { ok: false, error: pw.error });
+        return;
+      }
       const found = await findAccountByEmail(email);
       if (!found) {
         send(req, res, 404, { ok: false, error: "Account not found" });
         return;
       }
+      if (!found.passwordHash) {
+        send(req, res, 403, {
+          ok: false,
+          error:
+            "This account needs a password. Use Register with this email to set one.",
+        });
+        return;
+      }
+      if (!verifyPassword(pw.password, found.passwordHash)) {
+        send(req, res, 401, { ok: false, error: "Invalid email or password." });
+        return;
+      }
       const save = await loadUserBackup(found.id);
+      await saveAccount({ ...found, lastLoginAt: Date.now() });
       const sessionToken = await createSession(DATA_DIR, found.id);
       send(req, res, 200, {
         ok: true,

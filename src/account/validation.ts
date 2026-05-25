@@ -19,6 +19,19 @@ export function normalizePhone(phone: string): string {
   return digits.length > 0 ? `+${digits}` : "";
 }
 
+export function isValidPassword(
+  password: string
+): { ok: true; password: string } | { ok: false; error: string } {
+  const p = password;
+  if (p.length < 8) {
+    return { ok: false, error: "Password must be at least 8 characters." };
+  }
+  if (p.length > 128) {
+    return { ok: false, error: "Password is too long." };
+  }
+  return { ok: true, password: p };
+}
+
 export function maskEmail(email: string): string {
   const [user, domain] = email.split("@");
   if (!domain) return email;

@@ -86,7 +86,8 @@ function fenAfterPly(moves: GameMoveRecord[], ply: number): string {
 export async function buildGameReview(
   engine: StockfishEngine,
   input: GameReviewInput,
-  onProgress?: (p: ReviewProgress) => void
+  onProgress?: (p: ReviewProgress) => void,
+  isCancelled?: () => boolean
 ): Promise<GameReviewReport> {
   reviewDiag("build_start", {
     gameId: input.id,
@@ -116,6 +117,12 @@ export async function buildGameReview(
   const userAnalyses: ReviewMoveAnalysis[] = [];
 
   for (let i = 0; i < input.moves.length; i++) {
+    if (isCancelled?.()) {
+      engine.stop();
+      reviewDiag("error", { reason: "build_cancelled", ply: i });
+      throw new Error("Review cancelled");
+    }
+
     const m = input.moves[i];
     if (m.by !== "user") continue;
 
@@ -218,6 +225,16 @@ export async function buildGameReview(
     );
   }
 
+  const partialGrade =
+    userAnalyses.length < userMoveIndices.length;
+  if (partialGrade) {
+    reviewDiag("build_skip", {
+      reason: "partial_grades",
+      graded: userAnalyses.length,
+      expected: userMoveIndices.length,
+    });
+  }
+
   const cpLosses = userAnalyses.map((u) => u.cpLoss);
   const accuracy = averageAccuracy(cpLosses);
   const acpl = averageCentipawnLoss(cpLosses);
@@ -301,6 +318,11 @@ export async function buildGameReview(
 
   tick("Summary…");
   const narrative = buildNarrative(base);
+  if (partialGrade) {
+    narrative.unshift(
+      `${userMoveIndices.length - userAnalyses.length} move(s) could not be graded — stats use ${userAnalyses.length} of ${userMoveIndices.length} plies.`
+    );
+  }
 
   reviewDiag("build_done", {
     userMoves: userAnalyses.length,

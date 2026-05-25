@@ -4,6 +4,7 @@ import { reviewDiag } from "../review/reviewDiagnostics";
 import { enrichReviewWithTorch } from "../review/torchReview";
 import type { GameReviewInput, GameReviewReport, ReviewProgress } from "../review/types";
 import type { ChessEngine } from "../engine/types";
+import { runWithSharedTorch } from "../engine/enginePool";
 import { waitForEngineReady } from "../engine/torch";
 import { isLowPowerDevice } from "../utils/deviceCapability";
 
@@ -18,6 +19,7 @@ export function useGameReview() {
     runId.current += 1;
     setLoading(false);
     setProgress(null);
+    setError(null);
   }, []);
 
   const dismiss = useCallback(() => {
@@ -35,7 +37,7 @@ export function useGameReview() {
     async (
       stockfish: ChessEngine | null,
       input: GameReviewInput | null,
-      torch?: ChessEngine | null
+      _torch?: ChessEngine | null
     ) => {
       if (!input || input.moves.length === 0) {
         reviewDiag("error", { reason: "no_moves" });
@@ -78,33 +80,30 @@ export function useGameReview() {
         reviewDiag("engine_ready", { which: "stockfish" });
 
         stockfish.stop();
-        let result = await buildGameReview(stockfish, input, (p) => {
-          if (runId.current === id) setProgress(p);
-        });
-        if (runId.current !== id) return;
-
-        const useTorch = !isLowPowerDevice() && torch;
-        let torchEngine = useTorch ? torch : null;
-        if (torchEngine && !torchEngine.ready && !torchEngine.loadFailed) {
-          setProgress({
-            step: 0,
-            total: 1,
-            label: "Torch 4 second opinion…",
-          });
-          const torchReady = await waitForEngineReady(torchEngine, 18_000);
-          if (!torchReady || torchEngine.loadFailed) {
-            torchEngine = null;
-          }
-        }
-        if (torchEngine?.loadFailed) torchEngine = null;
-
-        if (torchEngine?.ready) {
-          reviewDiag("torch_start", {});
-          torchEngine.stop();
-          result = await enrichReviewWithTorch(torchEngine, result, (p) => {
+        let result = await buildGameReview(
+          stockfish,
+          input,
+          (p) => {
             if (runId.current === id) setProgress(p);
-          });
-          reviewDiag("torch_done", { used: true });
+          },
+          () => runId.current !== id
+        );
+        if (runId.current !== id) {
+          stockfish.stop();
+          return;
+        }
+
+        if (!isLowPowerDevice()) {
+          reviewDiag("torch_start", {});
+          const enriched = await runWithSharedTorch((torchEngine) =>
+            enrichReviewWithTorch(torchEngine, result, (p) => {
+              if (runId.current === id) setProgress(p);
+            })
+          );
+          if (enriched) {
+            result = enriched;
+            reviewDiag("torch_done", { used: true });
+          }
         }
 
         if (runId.current === id) {
@@ -115,17 +114,19 @@ export function useGameReview() {
           });
         }
       } catch (e) {
+        if (runId.current !== id) {
+          stockfish.stop();
+          return;
+        }
         reviewDiag("error", {
           message: e instanceof Error ? e.message : String(e),
         });
-        if (runId.current === id) {
-          setProgress(null);
-          setError(
-            e instanceof Error
-              ? e.message
-              : "Review failed — the engine may have been interrupted."
-          );
-        }
+        setProgress(null);
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Review failed — the engine may have been interrupted."
+        );
       } finally {
         if (runId.current === id) {
           setLoading(false);

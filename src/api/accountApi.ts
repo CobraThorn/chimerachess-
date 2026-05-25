@@ -34,15 +34,16 @@ export interface LoginLookupResult {
   save: ChimeraSaveBundle | null;
 }
 
-/** Look up account on the server by email (for sign-in on a new device). */
-export async function fetchAccountByEmail(
-  email: string
+/** Cloud sign-in with email + password (new device or after local register). */
+export async function loginRemote(
+  email: string,
+  password: string
 ): Promise<LoginLookupResult | null> {
   try {
     const res = await fetch(apiUrl("/api/chimera/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, password }),
     });
     const data = await parseBody<{
       ok?: boolean;
@@ -69,13 +70,14 @@ export async function registerAccountRemote(
     | "lastLoginAt"
     | "consents"
     | "chimeraSetupComplete"
-  >
+  >,
+  password: string
 ): Promise<{ ok: boolean; sessionToken?: string; error?: string }> {
   try {
     const res = await fetch(apiUrl("/api/chimera/register"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account }),
+      body: JSON.stringify({ account, password }),
     });
     const data = await parseBody<{
       ok?: boolean;

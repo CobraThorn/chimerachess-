@@ -7,7 +7,7 @@ import {
   isValidPhone,
   loadAccount,
   logDataEvent,
-  loginByEmail,
+  loginWithPassword,
   maskEmail,
   normalizePhone,
   registerUser,
@@ -99,6 +99,7 @@ export default function AccountDataSection() {
   );
   const [authBusy, setAuthBusy] = useState(false);
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [consents, setConsents] = useState<DataConsents>({ ...EMPTY_CONSENTS });
@@ -156,6 +157,7 @@ export default function AccountDataSection() {
     setAuthBusy(true);
     const result = await registerUser({
       email,
+      password,
       phone: null,
       displayName: displayName.trim() || "Player",
       consents,
@@ -179,7 +181,7 @@ export default function AccountDataSection() {
     setError(null);
     setSuccess(null);
     setAuthBusy(true);
-    const result = await loginByEmail(email);
+    const result = await loginWithPassword(email, password);
     setAuthBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -393,6 +395,14 @@ export default function AccountDataSection() {
                 placeholder="you@example.com"
                 required
               />
+              <Field
+                label="Password"
+                value={password}
+                onChange={setPassword}
+                type="password"
+                placeholder="At least 8 characters"
+                required
+              />
               {tab === "register" && (
                 <Field
                   label="Display name"
@@ -417,8 +427,7 @@ export default function AccountDataSection() {
               </button>
               {tab === "signin" && (
                 <p className="font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.35)]">
-                  Sign-in works offline on this device. With internet, we can restore your
-                  account from the cloud.
+                  Password is required for cloud backup and sign-in on other devices.
                 </p>
               )}
             </div>

@@ -135,10 +135,18 @@ export function loadMemory(): ChimeraMemory {
   }
 }
 
-export function saveMemory(memory: ChimeraMemory): void {
-  localStorage.setItem(CHIMERA_STORAGE_KEY, JSON.stringify(memory));
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(CHIMERA_MEMORY_EVENT));
+export function saveMemory(memory: ChimeraMemory): boolean {
+  try {
+    localStorage.setItem(CHIMERA_STORAGE_KEY, JSON.stringify(memory));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(CHIMERA_MEMORY_EVENT));
+    }
+    return true;
+  } catch {
+    if (import.meta.env?.DEV) {
+      console.warn("[CHIMERA] Could not save memory — storage may be full.");
+    }
+    return false;
   }
 }
 
@@ -179,6 +187,8 @@ export function upsertPattern(
   ];
 }
 
+const MAX_STORED_GAMES = 120;
+
 export function finishGame(
   memory: ChimeraMemory,
   game: StoredGame,
@@ -190,6 +200,9 @@ export function finishGame(
   }
 ): ChimeraMemory {
   const games = [...memory.games, game];
+  if (games.length > MAX_STORED_GAMES) {
+    games.splice(0, games.length - MAX_STORED_GAMES);
+  }
   let patterns = [...memory.patterns];
 
   for (const m of game.mistakes) {

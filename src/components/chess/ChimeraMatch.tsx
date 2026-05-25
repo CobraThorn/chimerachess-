@@ -66,7 +66,6 @@ import { CHIMERA_MIN_THINK_MS, waitAtLeast } from "../../chess/movePacing";
 import { createUserMoveClock } from "../../chess/userMoveClock";
 import { loadChimeraSetup } from "../../chimeraSetup/storage";
 import type { Color, GameState, Move, PieceType, Square } from "../../chess";
-import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, STOCKFISH_VERSION, type StockfishEngine } from "../../engine/stockfish";
 import { reviewDiag } from "../../review/reviewDiagnostics";
 import { useGameReview } from "../../hooks/useGameReview";
@@ -142,10 +141,19 @@ export default function ChimeraMatch() {
   const playedChimeraEloRef = useRef(effectiveChimeraElo(loadMemory()));
   const chimeraFailedAttemptsRef = useRef(0);
   const gameOverRef = useRef<string | null>(null);
+  const persistedGameIdRef = useRef<string | null>(null);
+  const chimeraTurnGenRef = useRef(0);
+  const chimeraMoveAttemptRef = useRef(0);
   gameOverRef.current = gameOver;
 
   const CHIMERA_MOVE_TIMEOUT_MS = 28_000;
-  const CHIMERA_TURN_WATCHDOG_MS = 42_000;
+  /** Must cover 3 move attempts + one engine reboot + min think pacing. */
+  const CHIMERA_TURN_WATCHDOG_MS =
+    MAX_CHIMERA_MOVE_ATTEMPTS * CHIMERA_MOVE_TIMEOUT_MS +
+    14_000 +
+    CHIMERA_MIN_THINK_MS +
+    2_000;
+  const MISTAKE_PERSIST_WAIT_MS = 10_000;
 
   const status = useMemo(() => getGameStatus(state), [state]);
   const topPatterns = useMemo(() => getTopPatterns(memory, 4), [memory]);
@@ -278,6 +286,9 @@ export default function ChimeraMatch() {
     setLastMoveSan(null);
     setPromotionPick(null);
     gameOverRef.current = null;
+    persistedGameIdRef.current = null;
+    chimeraTurnGenRef.current += 1;
+    chimeraMoveAttemptRef.current += 1;
     setGameOver(null);
     setReviewInput(null);
     setLastStoredGame(null);
@@ -330,9 +341,7 @@ export default function ChimeraMatch() {
       engine,
       () => {
         if (cancelled) return;
-        void acquireSharedTorch().then((torch) => {
-          if (!cancelled) void runReview(engine, input, torch);
-        });
+        if (!cancelled) void runReview(engine, input);
       },
       () => {
         if (!cancelled) {
@@ -380,12 +389,14 @@ export default function ChimeraMatch() {
     ) => {
       const g = gameRef.current;
       if (!g) return;
+      if (persistedGameIdRef.current === g.id) return;
       if (
         g.moves.length < 1 &&
         meta?.terminationReason !== CHIMERA_RESIGN_TERMINATION
       ) {
         return;
       }
+      persistedGameIdRef.current = g.id;
 
       const endedAt = Date.now();
       const snapshotMoves = [...g.moves];
@@ -406,7 +417,8 @@ export default function ChimeraMatch() {
 
       void (async () => {
         await waitForPendingMistakeAnalyses(
-          () => pendingMistakeAnalysesRef.current
+          () => pendingMistakeAnalysesRef.current,
+          MISTAKE_PERSIST_WAIT_MS
         );
         const live = gameRef.current;
         const mistakes =
@@ -488,19 +500,22 @@ export default function ChimeraMatch() {
 
   const resolveGameEnd = useCallback(
     (s: GameState) => {
+      if (gameOverRef.current) return;
       const st = getGameStatus(s);
       if (st.type === "checkmate") {
         const userWon = st.winner === userColor;
-        setGameOver(
-          userWon
-            ? "You win — full game review loading…"
-            : "CHIMERA wins — full game review loading…"
-        );
+        const message = userWon
+          ? "You win — full game review loading…"
+          : "CHIMERA wins — full game review loading…";
+        gameOverRef.current = message;
+        setGameOver(message);
         persistFinishedGame(userWon ? "user-win" : "chimera-win", {
           terminationReason: "checkmate",
         });
       } else if (st.type === "stalemate" || st.type === "draw") {
-        setGameOver("Draw — full game review loading…");
+        const message = "Draw — full game review loading…";
+        gameOverRef.current = message;
+        setGameOver(message);
         persistFinishedGame("draw", {
           terminationReason: st.type === "stalemate" ? "stalemate" : "draw",
         });
@@ -532,25 +547,49 @@ export default function ChimeraMatch() {
   const tryResolveChimeraMove = useCallback(
     async (
       engine: StockfishEngine,
-      current: GameState
+      current: GameState,
+      turnGen: number,
+      attemptId: number
     ): Promise<{ move: Move; uci: string } | null> => {
-      try {
-        const uci = await Promise.race([
-          getChimeraMove(engine, current, chimeraColor, memoryRef.current, {
-            mirror: false,
-            archetype: memoryRef.current.chimeraOpponentIdentity,
-          }),
-          new Promise<string | null>((resolve) => {
-            window.setTimeout(() => resolve(null), CHIMERA_MOVE_TIMEOUT_MS);
-          }),
-        ]);
+      const uci = await new Promise<string | null>((resolve) => {
+        const timer = window.setTimeout(() => {
+          engine.stop();
+          resolve(null);
+        }, CHIMERA_MOVE_TIMEOUT_MS);
 
-        if (uci) {
-          const resolved = resolveChimeraMoveFromUci(current, uci);
-          if (resolved) return resolved;
-        }
-      } catch {
-        /* engine threw — fall through to random legal move */
+        void getChimeraMove(engine, current, chimeraColor, memoryRef.current, {
+          mirror: false,
+          archetype: memoryRef.current.chimeraOpponentIdentity,
+        })
+          .then((result) => {
+            window.clearTimeout(timer);
+            if (
+              turnGen !== chimeraTurnGenRef.current ||
+              attemptId !== chimeraMoveAttemptRef.current
+            ) {
+              engine.stop();
+              resolve(null);
+              return;
+            }
+            resolve(result);
+          })
+          .catch(() => {
+            window.clearTimeout(timer);
+            engine.stop();
+            resolve(null);
+          });
+      });
+
+      if (
+        turnGen !== chimeraTurnGenRef.current ||
+        attemptId !== chimeraMoveAttemptRef.current
+      ) {
+        return null;
+      }
+
+      if (uci) {
+        const resolved = resolveChimeraMoveFromUci(current, uci);
+        if (resolved) return resolved;
       }
 
       const fallback = pickFallbackUci(current);
@@ -559,76 +598,109 @@ export default function ChimeraMatch() {
     [chimeraColor, resolveChimeraMoveFromUci]
   );
 
+  const applyChimeraResolvedMove = useCallback(
+    (current: GameState, resolved: { move: Move; uci: string }) => {
+      let next = makeMove(current, resolved.move);
+      let played = resolved;
+      if (!next) {
+        const fallback = pickFallbackUci(current);
+        const fallbackMove = fallback
+          ? resolveBotMove(current, fallback)
+          : null;
+        if (fallbackMove) {
+          next = makeMove(current, fallbackMove);
+          played = { move: fallbackMove, uci: fallback! };
+        }
+      }
+      if (!next) return false;
+
+      setState(next);
+      setLastMove(played.move);
+      setLastMoveSan(formatMove(current, played.move));
+      gameRef.current?.moves.push({
+        uci: moveToUci(played.move),
+        fen: toFen(next),
+        by: "chimera",
+        san: formatMove(current, played.move),
+      });
+      setMemory((prev) => {
+        const opp = prev.chimeraOpponent ?? createPersonaPlayStyle("opponent");
+        return refreshOpponentCognitiveIdentity({
+          ...prev,
+          chimeraOpponent: updateStyleFromMove(opp, current, played.move),
+        });
+      });
+      resolveGameEnd(next);
+      return true;
+    },
+    [resolveGameEnd]
+  );
+
   const runChimeraTurn = useCallback(
     async (current: GameState) => {
       if (gameOverRef.current || current.turn !== chimeraColor) return;
       if (chimeraTurnLockRef.current) return;
 
-      const terminal = getGameStatus(current);
-      if (terminal.type !== "ongoing") {
-        resolveGameEnd(current);
-        return;
-      }
+      chimeraTurnLockRef.current = true;
+      setChimeraThinking(true);
+      const turnGen = ++chimeraTurnGenRef.current;
+      const thinkStart = Date.now();
+      let resigned = false;
+      let thinkWatchdog: ReturnType<typeof window.setTimeout> | undefined;
 
-      let engine = engineRef.current;
-      if (!engine || engine.loadFailed) {
-        logChimeraRecoveryAttempt(1, "boot_play_engine");
-        const ok = await rebootPlayEngine();
-        if (!ok) {
-          const fallback = pickFallbackUci(current);
-          const move = fallback ? resolveBotMove(current, fallback) : null;
-          if (move) {
-            const next = makeMove(current, move);
-            if (next) {
-              setState(next);
-              setLastMove(move);
-              setLastMoveSan(formatMove(current, move));
-              gameRef.current?.moves.push({
-                uci: moveToUci(move),
-                fen: toFen(next),
-                by: "chimera",
-                san: formatMove(current, move),
-              });
-              resolveGameEnd(next);
-            }
-          } else {
-            handleChimeraResign("engine_load_failed", {
-              loadFailed: engine?.loadFailed ? 1 : 0,
-            });
-          }
+      try {
+        const terminal = getGameStatus(current);
+        if (terminal.type !== "ongoing") {
+          resolveGameEnd(current);
           return;
         }
-        engine = engineRef.current!;
-      } else if (!engine.ready) {
-        logChimeraRecoveryAttempt(1, "wait_play_engine_ready");
-        const ok = await waitEngineReady(engine);
-        if (!ok) {
-          const rebooted = await rebootPlayEngine();
-          if (!rebooted) {
-            handleChimeraResign("engine_not_ready", { waitedMs: 14_000 });
+
+        let engine = engineRef.current;
+        if (!engine || engine.loadFailed) {
+          logChimeraRecoveryAttempt(1, "boot_play_engine");
+          const ok = await rebootPlayEngine();
+          if (!ok) {
+            const fallback = pickFallbackUci(current);
+            const move = fallback ? resolveBotMove(current, fallback) : null;
+            if (move) {
+              applyChimeraResolvedMove(current, { move, uci: moveToUci(move) });
+            } else {
+              handleChimeraResign("engine_load_failed", {
+                loadFailed: engine?.loadFailed ? 1 : 0,
+              });
+            }
             return;
           }
           engine = engineRef.current!;
+        } else if (!engine.ready) {
+          logChimeraRecoveryAttempt(1, "wait_play_engine_ready");
+          const ok = await waitEngineReady(engine);
+          if (!ok) {
+            const rebooted = await rebootPlayEngine();
+            if (!rebooted) {
+              handleChimeraResign("engine_not_ready", { waitedMs: 14_000 });
+              return;
+            }
+            engine = engineRef.current!;
+          }
         }
-      }
 
-      chimeraTurnLockRef.current = true;
-      setChimeraThinking(true);
-      const thinkStart = Date.now();
-      let resigned = false;
+        if (turnGen !== chimeraTurnGenRef.current || gameOverRef.current) return;
 
-      const thinkWatchdog = window.setTimeout(() => {
-        resigned = true;
-        handleChimeraResign("watchdog_timeout", { ms: CHIMERA_TURN_WATCHDOG_MS });
-      }, CHIMERA_TURN_WATCHDOG_MS);
+        thinkWatchdog = window.setTimeout(() => {
+          resigned = true;
+          engineRef.current?.stop();
+          mistakeEngineRef.current?.stop();
+        }, CHIMERA_TURN_WATCHDOG_MS);
 
-      try {
         pendingMistakeAnalysesRef.current = 0;
 
         let resolved: { move: Move; uci: string } | null = null;
 
         for (let attempt = 1; attempt <= MAX_CHIMERA_MOVE_ATTEMPTS; attempt++) {
-          if (gameOverRef.current || resigned) return;
+          if (gameOverRef.current || turnGen !== chimeraTurnGenRef.current) {
+            return;
+          }
 
           if (attempt === 2) {
             logChimeraRecoveryAttempt(2, "engine_stop_and_retry");
@@ -641,7 +713,13 @@ export default function ChimeraMatch() {
             engine = engineRef.current!;
           }
 
-          resolved = await tryResolveChimeraMove(engine, current);
+          const attemptId = ++chimeraMoveAttemptRef.current;
+          resolved = await tryResolveChimeraMove(
+            engine,
+            current,
+            turnGen,
+            attemptId
+          );
           if (resolved) {
             chimeraFailedAttemptsRef.current = 0;
             break;
@@ -649,7 +727,7 @@ export default function ChimeraMatch() {
           chimeraFailedAttemptsRef.current += 1;
         }
 
-        if (!resolved && !gameOverRef.current && !resigned) {
+        if (!resolved && !gameOverRef.current) {
           const fallback = pickFallbackUci(current);
           if (fallback) {
             const move = resolveBotMove(current, fallback);
@@ -657,79 +735,43 @@ export default function ChimeraMatch() {
           }
         }
 
-        if (!resolved || gameOverRef.current || resigned) {
-          handleChimeraResign(
-            chimeraFailedAttemptsRef.current >= 2
-              ? "repeated_failed_move"
-              : "recovery_exhausted",
-            { attempts: MAX_CHIMERA_MOVE_ATTEMPTS }
-          );
+        if (!resolved) {
+          if (!gameOverRef.current) {
+            handleChimeraResign(
+              resigned
+                ? "watchdog_timeout"
+                : chimeraFailedAttemptsRef.current >= 2
+                  ? "repeated_failed_move"
+                  : "recovery_exhausted",
+              {
+                attempts: MAX_CHIMERA_MOVE_ATTEMPTS,
+                ...(resigned ? { ms: CHIMERA_TURN_WATCHDOG_MS } : {}),
+              }
+            );
+          }
           return;
         }
 
         await waitAtLeast(thinkStart, CHIMERA_MIN_THINK_MS);
-        if (gameOverRef.current || resigned) return;
+        if (gameOverRef.current || turnGen !== chimeraTurnGenRef.current) return;
 
-        let next = makeMove(current, resolved.move);
-        if (!next) {
-          const fallback = pickFallbackUci(current);
-          const fallbackMove = fallback
-            ? resolveBotMove(current, fallback)
-            : null;
-          if (fallbackMove) {
-            next = makeMove(current, fallbackMove);
-            resolved = { move: fallbackMove, uci: fallback! };
+        if (!applyChimeraResolvedMove(current, resolved)) {
+          if (!gameOverRef.current) {
+            handleChimeraResign("apply_move_failed", { uci: resolved.uci });
           }
         }
-        if (!next) {
-          handleChimeraResign("apply_move_failed", {
-            uci: resolved.uci,
-          });
-          return;
-        }
-
-        const playedUci = moveToUci(resolved.move);
-        setState(next);
-        setLastMove(resolved.move);
-        setLastMoveSan(formatMove(current, resolved.move));
-
-        gameRef.current?.moves.push({
-          uci: playedUci,
-          fen: toFen(next),
-          by: "chimera",
-          san: formatMove(current, resolved.move),
-        });
-
-        setMemory((prev) => {
-          const opp =
-            prev.chimeraOpponent ?? createPersonaPlayStyle("opponent");
-          return refreshOpponentCognitiveIdentity({
-            ...prev,
-            chimeraOpponent: updateStyleFromMove(opp, current, resolved.move),
-          });
-        });
-
-        resolveGameEnd(next);
       } catch {
+        if (gameOverRef.current) return;
         const fallback = pickFallbackUci(current);
         const move = fallback ? resolveBotMove(current, fallback) : null;
-        const next = move ? makeMove(current, move) : null;
-        if (next && move) {
-          setState(next);
-          setLastMove(move);
-          setLastMoveSan(formatMove(current, move));
-          gameRef.current?.moves.push({
-            uci: moveToUci(move),
-            fen: toFen(next),
-            by: "chimera",
-            san: formatMove(current, move),
-          });
-          resolveGameEnd(next);
-        } else {
+        if (
+          !move ||
+          !applyChimeraResolvedMove(current, { move, uci: moveToUci(move) })
+        ) {
           handleChimeraResign("recovery_exhausted", { phase: "exception" });
         }
       } finally {
-        window.clearTimeout(thinkWatchdog);
+        if (thinkWatchdog !== undefined) window.clearTimeout(thinkWatchdog);
         chimeraTurnLockRef.current = false;
         if (!gameOverRef.current) setChimeraThinking(false);
       }
@@ -741,6 +783,7 @@ export default function ChimeraMatch() {
       rebootPlayEngine,
       tryResolveChimeraMove,
       waitEngineReady,
+      applyChimeraResolvedMove,
     ]
   );
 
@@ -764,7 +807,6 @@ export default function ChimeraMatch() {
     state.turn,
     positionFen,
     runChimeraTurn,
-    state,
   ]);
 
   const applyUserMove = useCallback(

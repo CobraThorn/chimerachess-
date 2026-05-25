@@ -1,5 +1,5 @@
 import {
-  fetchAccountByEmail,
+  loginRemote,
   registerAccountRemote,
   remoteToUserAccount,
 } from "../api/accountApi";
@@ -7,7 +7,7 @@ import { scheduleSync } from "../api/chimeraBackend";
 import { fetchUserBackup } from "../api/saveBackup";
 import { restoreSaveForAccount } from "../chimeraSetup/backup";
 import type { ChimeraSaveBundle } from "../chimeraSetup/types";
-import { isValidEmail, normalizeEmail } from "./validation";
+import { isValidEmail, isValidPassword, normalizeEmail } from "./validation";
 import {
   loadAccount,
   registerAccount as createLocalAccount,
@@ -36,23 +36,37 @@ async function restoreCloudSave(
 }
 
 /**
- * Sign in: this device first, then cloud (same email on phone / new browser).
+ * Sign in with email + password (local device or cloud restore).
  */
-export async function loginByEmail(email: string): Promise<AuthResult> {
+export async function loginWithPassword(
+  email: string,
+  password: string
+): Promise<AuthResult> {
   const norm = normalizeEmail(email);
   if (!isValidEmail(norm)) {
     return { ok: false, error: "Enter a valid email address." };
+  }
+  const pw = isValidPassword(password);
+  if (!pw.ok) {
+    return { ok: false, error: pw.error };
   }
 
   const local = loadAccount();
   if (local && normalizeEmail(local.email) === norm) {
     const account = activeSession(local);
     saveAccount(account);
-    const cloud = await fetchAccountByEmail(norm);
+    const cloud = await loginRemote(norm, pw.password);
     if (!cloud) {
-      await registerAccountRemote(account);
+      const reg = await registerAccountRemote(account, pw.password);
+      if (!reg.ok) {
+        return {
+          ok: false,
+          error: reg.error ?? "Could not reach the cloud. Try again.",
+        };
+      }
+    } else {
+      await restoreCloudSave(account.id, cloud.save);
     }
-    await restoreCloudSave(account.id, cloud?.save);
     scheduleSync(800);
     return {
       ok: true,
@@ -69,7 +83,7 @@ export async function loginByEmail(email: string): Promise<AuthResult> {
     };
   }
 
-  const lookup = await fetchAccountByEmail(norm);
+  const lookup = await loginRemote(norm, pw.password);
   if (lookup) {
     const account = activeSession(remoteToUserAccount(lookup.account));
     saveAccount(account);
@@ -85,7 +99,7 @@ export async function loginByEmail(email: string): Promise<AuthResult> {
   return {
     ok: false,
     error:
-      "No account found for this email. Use Register to create one (only takes a moment).",
+      "Invalid email or password, or no cloud account. Register if you are new.",
   };
 }
 
@@ -94,6 +108,7 @@ export async function loginByEmail(email: string): Promise<AuthResult> {
  */
 export async function registerUser(input: {
   email: string;
+  password: string;
   phone: string | null;
   displayName: string;
   consents: DataConsents;
@@ -102,6 +117,10 @@ export async function registerUser(input: {
   if (!isValidEmail(norm)) {
     return { ok: false, error: "Enter a valid email address." };
   }
+  const pw = isValidPassword(input.password);
+  if (!pw.ok) {
+    return { ok: false, error: pw.error };
+  }
   if (!input.consents.analytics) {
     return {
       ok: false,
@@ -109,7 +128,7 @@ export async function registerUser(input: {
     };
   }
 
-  const lookup = await fetchAccountByEmail(norm);
+  const lookup = await loginRemote(norm, pw.password);
   if (lookup) {
     const account = activeSession({
       ...remoteToUserAccount(lookup.account),
@@ -137,6 +156,10 @@ export async function registerUser(input: {
       consents: input.consents,
     });
     saveAccount(account);
+    const reg = await registerAccountRemote(account, pw.password);
+    if (!reg.ok) {
+      return { ok: false, error: reg.error ?? "Could not register with cloud." };
+    }
     await restoreCloudSave(account.id);
     scheduleSync(800);
     return {
@@ -160,7 +183,13 @@ export async function registerUser(input: {
     displayName: input.displayName,
     consents: input.consents,
   });
-  await registerAccountRemote(account);
+  const reg = await registerAccountRemote(account, pw.password);
+  if (!reg.ok) {
+    return {
+      ok: false,
+      error: reg.error ?? "Could not create cloud account. Try again.",
+    };
+  }
   return {
     ok: true,
     account,

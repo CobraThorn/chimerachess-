@@ -21,6 +21,7 @@ import type { GameMoveRecord, MistakeRecord, StoredGame } from "../../ai/types";
 import {
   createInitialState,
   formatMove,
+  getAllLegalMoves,
   getGameStatus,
   getLegalMoves,
   makeMove,
@@ -40,7 +41,6 @@ import {
 import type { CrsPostGameSummary } from "../../crs/types";
 import CrsPostGamePanel from "../crs/CrsPostGamePanel";
 import CrsRatingCard from "../crs/CrsRatingCard";
-import { acquireSharedTorch } from "../../engine/enginePool";
 import { createStockfishEngine, type StockfishEngine } from "../../engine/stockfish";
 import { useGameReview } from "../../hooks/useGameReview";
 import type { GameResult } from "../../online/types";
@@ -146,6 +146,8 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
     userMoveTimesMs: number[];
   } | null>(null);
   const endedRef = useRef(false);
+  const botTurnLockRef = useRef(false);
+  const SOLO_BOT_MOVE_TIMEOUT_MS = 28_000;
   const reviewStartedRef = useRef(false);
   const pendingMistakeAnalysesRef = useRef(0);
   const playedChimeraEloRef = useRef(0);
@@ -237,58 +239,84 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
 
   const runBotTurn = useCallback(
     async (current: GameState, currentClock: OnlineClock, startedAt: number) => {
-      const engine = engineRef.current;
-      if (!engine?.ready || endedRef.current) return;
-
+      if (endedRef.current || botTurnLockRef.current) return;
       if (current.turn !== botColor) return;
 
-      const { clock: afterFlag, flagged } = applyMoveClock(
-        currentClock,
-        botColor,
-        startedAt,
-        tcDef.incrementMs
-      );
-      if (flagged) {
-        finish(userColor === "w" ? "white-win" : "black-win", "on time");
-        return;
-      }
+      const engine = engineRef.current;
+      if (!engine?.ready) return;
 
+      botTurnLockRef.current = true;
       setBotThinking(true);
-      const thinkStart = Date.now();
-      const mem = loadMemory();
-      const uci = await getChimeraMove(engine, current, botColor, mem);
-      await waitAtLeast(thinkStart, Math.min(CHIMERA_MIN_THINK_MS, botThinkCap(tc)));
 
-      if (endedRef.current) {
-        setBotThinking(false);
-        return;
+      try {
+        const { clock: afterFlag, flagged } = applyMoveClock(
+          currentClock,
+          botColor,
+          startedAt,
+          tcDef.incrementMs
+        );
+        if (flagged) {
+          finish(userColor === "w" ? "white-win" : "black-win", "on time");
+          return;
+        }
+
+        const thinkStart = Date.now();
+        const mem = loadMemory();
+        const uci = await new Promise<string | null>((resolve) => {
+          const timer = window.setTimeout(() => {
+            engine.stop();
+            resolve(null);
+          }, SOLO_BOT_MOVE_TIMEOUT_MS);
+          void getChimeraMove(engine, current, botColor, mem)
+            .then((result) => {
+              window.clearTimeout(timer);
+              resolve(result);
+            })
+            .catch(() => {
+              window.clearTimeout(timer);
+              engine.stop();
+              resolve(null);
+            });
+        });
+
+        await waitAtLeast(
+          thinkStart,
+          Math.min(CHIMERA_MIN_THINK_MS, botThinkCap(tc))
+        );
+
+        if (endedRef.current) return;
+
+        let move = uci ? uciToMove(current, uci) : null;
+        if (!move) {
+          const legal = getAllLegalMoves(current);
+          if (legal.length) {
+            const fallback = moveToUci(
+              legal[Math.floor(Math.random() * legal.length)]!
+            );
+            move = uciToMove(current, fallback);
+          }
+        }
+        if (!move) return;
+
+        const next = makeMove(current, move);
+        if (!next) return;
+
+        recordMove(move, "chimera", current);
+        setClock(afterFlag);
+        setTurnStartedAt(Date.now());
+        setState(next);
+        setLastMove(move);
+
+        const st = getGameStatus(next);
+        if (st.type === "checkmate") {
+          finish(userColor === "w" ? "black-win" : "white-win", "checkmate");
+        } else if (st.type === "stalemate" || st.type === "draw") {
+          finish("draw", st.type);
+        }
+      } finally {
+        botTurnLockRef.current = false;
+        if (!endedRef.current) setBotThinking(false);
       }
-
-      const move = uci ? uciToMove(current, uci) : null;
-      if (!move) {
-        setBotThinking(false);
-        return;
-      }
-
-      const next = makeMove(current, move);
-      if (!next) {
-        setBotThinking(false);
-        return;
-      }
-
-      recordMove(move, "chimera", current);
-      setClock(afterFlag);
-      setTurnStartedAt(Date.now());
-      setState(next);
-      setLastMove(move);
-
-      const st = getGameStatus(next);
-      if (st.type === "checkmate") {
-        finish(userColor === "w" ? "black-win" : "white-win", "checkmate");
-      } else if (st.type === "stalemate" || st.type === "draw") {
-        finish("draw", st.type);
-      }
-      setBotThinking(false);
     },
     [botColor, finish, recordMove, tc, tcDef.incrementMs, userColor]
   );
@@ -387,9 +415,7 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
         reviewEngine,
         () => {
           if (cancelled) return;
-          void acquireSharedTorch().then((torch) => {
-            if (!cancelled) void runReview(reviewEngine, reviewInput, torch);
-          });
+          if (!cancelled) void runReview(reviewEngine, reviewInput);
         },
         () => {
           if (!cancelled) {

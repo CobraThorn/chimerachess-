@@ -2,7 +2,7 @@ import type { GameState } from "../chess";
 import { getAllLegalMoves } from "../chess";
 import { toFen } from "../chess/fen";
 import { moveToUci, uciToMove } from "../chess/uci";
-import { acquireSharedTorch } from "../engine/enginePool";
+import { runWithSharedTorch } from "../engine/enginePool";
 import type { StockfishEngine } from "../engine/stockfish";
 import {
   configureEngine,
@@ -52,12 +52,9 @@ async function preferTorchLineWhenStrong(
   if (!stockfishUci || targetElo < 2400) return stockfishUci;
 
   const torchUci = await Promise.race([
-    (async () => {
-      const torch = await acquireSharedTorch();
-      if (!torch) return null;
-      torch.stop();
-      return getBestMove(torch, fen, Math.min(18, depth + 1));
-    })(),
+    runWithSharedTorch((torch) =>
+      getBestMove(torch, fen, Math.min(18, depth + 1))
+    ),
     new Promise<string | null>((resolve) => {
       window.setTimeout(() => resolve(null), 6_000);
     }),

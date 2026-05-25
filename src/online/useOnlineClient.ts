@@ -173,7 +173,20 @@ export function useOnlineClient() {
 
     ws.onerror = () => patch({ error: "Connection failed", connected: false });
     ws.onclose = () => {
-      patch({ connected: false });
+      const m = matchRef.current;
+      setState((s) => {
+        if (m && s.phase === "playing") {
+          return {
+            ...s,
+            connected: false,
+            phase: "ended",
+            result: m.color === "w" ? "black-win" : "white-win",
+            endReason: "disconnect",
+            error: "Connection lost — game ended.",
+          };
+        }
+        return { ...s, connected: false };
+      });
       wsRef.current = null;
     };
   }, [patch]);

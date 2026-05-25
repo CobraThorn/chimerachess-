@@ -19,8 +19,10 @@ import ChessBoardGrid from "./ChessBoardGrid";
 import {
   createInitialState,
   formatMove,
+  getAllLegalMoves,
   getGameStatus,
   makeMove,
+  moveToUci,
   resolveBotMove,
 } from "../../chess";
 import { waitAtLeast } from "../../chess/movePacing";
@@ -136,9 +138,15 @@ export default function ChimeraVsChimera() {
         mirror: true,
         archetype,
       });
-      if (!uci) return false;
-
-      const move = resolveBotMove(current, uci);
+      let move = uci ? resolveBotMove(current, uci) : null;
+      if (!move) {
+        const legal = getAllLegalMoves(current);
+        if (!legal.length) return false;
+        const fallback = moveToUci(
+          legal[Math.floor(Math.random() * legal.length)]!
+        );
+        move = resolveBotMove(current, fallback);
+      }
       if (!move) return false;
 
       await waitAtLeast(thinkStart, 280);
@@ -183,6 +191,13 @@ export default function ChimeraVsChimera() {
         if (!cont || !playingRef.current) {
           setPlaying(false);
           playingRef.current = false;
+          if (!cont) {
+            setStatusText((prev) =>
+              /wins|Draw/i.test(prev)
+                ? prev
+                : "Mirror duel stopped — engine could not continue."
+            );
+          }
           break;
         }
         await new Promise((r) =>

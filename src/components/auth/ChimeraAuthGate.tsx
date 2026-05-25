@@ -4,7 +4,7 @@ import {
   EMPTY_CONSENTS,
   hasStoredAccount,
   logDataEvent,
-  loginByEmail,
+  loginWithPassword,
   maskEmail,
   registerUser,
   storedAccountEmail,
@@ -106,6 +106,7 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
   );
   const [authBusy, setAuthBusy] = useState(false);
   const [email, setEmail] = useState(() => storedAccountEmail() ?? "");
+  const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [consents, setConsents] = useState<DataConsents>({ ...EMPTY_CONSENTS });
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +123,7 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
     setAuthBusy(true);
     const result = await registerUser({
       email,
+      password,
       phone: null,
       displayName: displayName.trim() || "Player",
       consents,
@@ -138,7 +140,7 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
   const handleSignIn = async () => {
     setError(null);
     setAuthBusy(true);
-    const result = await loginByEmail(email);
+    const result = await loginWithPassword(email, password);
     setAuthBusy(false);
     if (!result.ok) {
       setError(friendlyCloudError(result.error));
@@ -204,6 +206,15 @@ export default function ChimeraAuthGate({ onAuthenticated }: ChimeraAuthGateProp
             type="email"
             placeholder="you@example.com"
             required
+          />
+          <Field
+            label="Password"
+            value={password}
+            onChange={setPassword}
+            type="password"
+            placeholder="At least 8 characters"
+            required
+            hint="Required for cloud backup and sign-in on other devices."
           />
           {tab === "register" && (
             <Field
