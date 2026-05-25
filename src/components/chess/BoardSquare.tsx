@@ -24,6 +24,7 @@ export interface BoardSquareProps {
   isEngineTo: boolean;
   heat?: { fill: string; ring: string };
   hidePiece: boolean;
+  onPointerDown?: (e: React.PointerEvent) => void;
 }
 
 function BoardSquare({
@@ -42,6 +43,7 @@ function BoardSquare({
   isEngineTo,
   heat,
   hidePiece,
+  onPointerDown,
 }: BoardSquareProps) {
   const isLight = isLightSquare(sq);
   const bg = isLight ? boardTheme.lightSquare : boardTheme.darkSquare;
@@ -52,12 +54,13 @@ function BoardSquare({
     <button
       type="button"
       data-square={sq}
-      disabled={!interactive}
+      aria-disabled={!interactive}
+      onPointerDown={interactive ? onPointerDown : undefined}
       style={{ backgroundColor: bg }}
       className={[
         "relative flex size-full min-h-0 min-w-0 items-center justify-center overflow-hidden p-0",
         "select-none",
-        interactive ? "cursor-grab active:cursor-grabbing" : "cursor-default",
+        interactive ? "cursor-grab active:cursor-grabbing" : "pointer-events-none cursor-default",
         isThinking && "ring-1 ring-inset ring-[rgba(0,229,255,0.25)]",
       ]
         .filter(Boolean)

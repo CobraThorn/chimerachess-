@@ -53,12 +53,16 @@ export function effectiveChimeraElo(memory: ChimeraMemory): number {
   const cal = ensureChimeraCalibration(memory);
   const user = Math.max(getUserStrength(memory), cal.perceivedUserElo);
   const floor = getChallengeFloor(memory, user);
+  const confidence =
+    cal.ratingDeviation !== undefined
+      ? Math.min(1, Math.max(0, 1 - cal.ratingDeviation / 320))
+      : cal.confidence;
 
-  if (cal.confidence >= 0.78) {
+  if (confidence >= 0.78) {
     return Math.min(3200, Math.max(stored, user + 25));
   }
 
-  const blend = cal.confidence;
+  const blend = confidence;
   const target = Math.round(stored * blend + Math.max(stored, floor) * (1 - blend));
   return Math.min(3200, Math.max(target, stored));
 }

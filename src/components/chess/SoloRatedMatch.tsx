@@ -53,6 +53,7 @@ import {
 import type { OnlineClock } from "../../online/types";
 import GameReviewPanel from "../review/GameReviewPanel";
 import type { GameReviewInput } from "../../review/types";
+import ChimeraCalibrationMath from "./ChimeraCalibrationMath";
 import ChessBoardGrid from "./ChessBoardGrid";
 import ChessPiece from "./ChessPiece";
 
@@ -736,6 +737,12 @@ export default function SoloRatedMatch({ tc, onBack }: SoloRatedMatchProps) {
               >
                 Resign
               </button>
+            </div>
+          )}
+
+          {phase === "ended" && memory.lastCalibrationMath && (
+            <div className="mt-6">
+              <ChimeraCalibrationMath math={memory.lastCalibrationMath} />
             </div>
           )}
 

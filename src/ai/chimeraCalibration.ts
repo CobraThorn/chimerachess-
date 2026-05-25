@@ -1,6 +1,11 @@
 import { expectedScore } from "../crs/formula";
 import { clampElo, resultToScore } from "./elo";
-import type { ChimeraCalibrationState, ChimeraMemory, StoredGame } from "./types";
+import type {
+  CalibrationMathSnapshot,
+  ChimeraCalibrationState,
+  ChimeraMemory,
+  StoredGame,
+} from "./types";
 import { INITIAL_CHIMERA_ELO, INITIAL_USER_ELO } from "./types";
 import { getUserStrength } from "./chimeraStrength";
 
@@ -12,9 +17,14 @@ export const CALIBRATION_CRS_MODES = new Set([
   "rapid",
 ]);
 
+/** Elo scale (standard). */
+export const ELO_SCALE = 400;
+
+/** Logistic move-efficiency: fewer full moves → stronger performance signal. */
+export const EFFICIENCY_HALF_MOVES = 52;
+
 export interface CalibrateGameInput {
   storedChimeraElo: number;
-  /** Effective strength CHIMERA actually played at (snapshot at game start). */
   playedChimeraElo: number;
   calibration: ChimeraCalibrationState;
   crsAnchorElo: number;
@@ -25,8 +35,7 @@ export interface CalibrateGameResult {
   newStoredElo: number;
   delta: number;
   calibration: ChimeraCalibrationState;
-  /** Human-readable note for logs / debug UI */
-  note: string;
+  math: CalibrationMathSnapshot;
 }
 
 export function ensureChimeraCalibration(
@@ -41,13 +50,14 @@ export function ensureChimeraCalibration(
       getUserStrength(memory) - 80
     ),
     100,
-    3000
+    3200
   );
 
   return {
     perceivedUserElo: perceived,
-    confidence: Math.min(1, games / 18),
+    confidence: confidenceFromRd(initialRatingDeviation(games)),
     calibrationGames: games,
+    ratingDeviation: initialRatingDeviation(games),
     lastPlayedElo: memory.chimeraElo ?? INITIAL_CHIMERA_ELO,
   };
 }
@@ -57,70 +67,115 @@ export function isChimeraCalibrationGame(mode?: string): boolean {
   return CALIBRATION_CRS_MODES.has(mode);
 }
 
-/** Full moves (both sides) from ply count. */
 export function fullMovesFromPlies(totalPlies: number): number {
   return Math.max(1, Math.round(totalPlies / 2));
 }
 
+/** σ_start / √(1 + n) — Glicko-style decay of uncertainty. */
+export function initialRatingDeviation(calibrationGames: number): number {
+  const sigma0 = 320;
+  return Math.max(80, Math.round(sigma0 / Math.sqrt(1 + calibrationGames / 4)));
+}
+
+export function confidenceFromRd(ratingDeviation: number): number {
+  return Math.min(1, Math.max(0, 1 - ratingDeviation / 320));
+}
+
 /**
- * Quick decisive wins/losses amplify calibration (e.g. wipe in ~25 full moves).
+ * Logistic efficiency: at half-move count h, factor = 1.
+ * Shorter decisive games → factor > 1 (capped).
  */
-export function moveEfficiencyMultiplier(
+export function moveEfficiencyFactor(
   result: StoredGame["result"],
   totalPlies: number
 ): number {
+  if (result === "draw") return 1;
   const full = fullMovesFromPlies(totalPlies);
-  const quick = Math.max(0, (52 - full) / 52);
-
-  if (result === "user-win") {
-    if (full >= 58) return 1;
-    return 1 + 0.85 * quick;
-  }
-  if (result === "chimera-win") {
-    if (full >= 58) return 1;
-    return 1 + 0.55 * quick;
-  }
+  const x = (EFFICIENCY_HALF_MOVES - full) / 12;
+  const logistic = 1 / (1 + Math.exp(-x));
+  const centered = 0.82 + 0.36 * logistic;
+  if (result === "user-win") return Math.min(1.75, centered);
+  if (result === "chimera-win") return Math.min(1.45, 2 - centered);
   return 1;
 }
 
-/** K decreases as confidence grows — fast early calibration, stable later. */
-export function calibrationKFactor(calibrationGames: number, confidence: number): number {
-  const gamesBoost = calibrationGames < 4 ? 1.35 : calibrationGames < 10 ? 1.15 : 1;
-  const base = 58 * gamesBoost;
-  const settled = 14 + confidence * 46;
-  return Math.round(base * (1 - confidence * 0.55) + settled * confidence * 0.55);
+/** Average centipawn loss on user mistakes → small penalty on S. */
+export function mistakePerformancePenalty(game: StoredGame): number {
+  const userMistakes = game.mistakes.filter((m) => m.cpLoss > 0);
+  if (!userMistakes.length) return 0;
+  const avg = userMistakes.reduce((s, m) => s + m.cpLoss, 0) / userMistakes.length;
+  return Math.min(0.12, avg / 900);
 }
 
-function blendAnchorUser(
+/**
+ * Performance score S: result × efficiency (wins) or result / efficiency (losses),
+ * minus mistake penalty, clamped to [0, 1].
+ */
+export function performanceScoreFromGame(game: StoredGame): {
+  resultScore: number;
+  efficiencyFactor: number;
+  mistakePenalty: number;
+  performanceScore: number;
+} {
+  const resultScore = resultToScore(game.result, true);
+  const efficiencyFactor = moveEfficiencyFactor(game.result, game.moves.length);
+  const mistakePenalty = mistakePerformancePenalty(game);
+
+  let performanceScore: number = resultScore;
+  if (game.result === "user-win") {
+    performanceScore = resultScore * efficiencyFactor - mistakePenalty;
+  } else if (game.result === "chimera-win") {
+    performanceScore = resultScore / efficiencyFactor - mistakePenalty;
+  } else {
+    performanceScore = resultScore - mistakePenalty * 0.5;
+  }
+
+  performanceScore = Math.max(0, Math.min(1, performanceScore));
+
+  return { resultScore, efficiencyFactor, mistakePenalty, performanceScore };
+}
+
+/** K = 800 / RD, bounded — standard Elo step scaled by uncertainty. */
+export function calibrationKFromRd(ratingDeviation: number): number {
+  return Math.round(Math.max(12, Math.min(72, 800 / ratingDeviation)));
+}
+
+export function blendUserRatingForExpected(
   perceived: number,
   crsAnchor: number,
   calibrationGames: number
 ): number {
-  const w = Math.min(0.7, calibrationGames / 22);
+  const w = Math.min(0.72, calibrationGames / (calibrationGames + 14));
   return clampElo(perceived * (1 - w) + crsAnchor * w, 100, 3200);
 }
 
-function challengeTargetElo(perceivedUser: number): number {
-  if (perceivedUser < 700) return perceivedUser + 35;
-  if (perceivedUser < 1000) return perceivedUser + 55;
-  if (perceivedUser < 1400) return perceivedUser + 95;
-  if (perceivedUser < 1800) return perceivedUser + 145;
-  if (perceivedUser < 2200) return perceivedUser + 205;
-  return perceivedUser + 265;
+/** Target CHIMERA rating for ~50% expected score: R_c = R_u + δ. */
+export function challengeMarginElo(userRating: number): number {
+  return Math.round(35 + 0.12 * Math.max(0, userRating - 400));
 }
 
-function maxSingleStep(calibrationGames: number, confidence: number): number {
-  if (calibrationGames < 3) return 140;
-  if (calibrationGames < 8) return 100;
-  if (confidence < 0.45) return 75;
-  if (confidence < 0.75) return 52;
-  return 38;
+export function targetChimeraElo(userRating: number): number {
+  return clampElo(userRating + challengeMarginElo(userRating), 80, 3200);
+}
+
+function updateRatingDeviation(
+  rd: number,
+  games: number,
+  surprise: number
+): number {
+  const decay = 18 + Math.min(12, games * 0.8);
+  const shock = Math.abs(surprise) > 0.45 ? 12 : Math.abs(surprise) > 0.25 ? 6 : 0;
+  return Math.max(80, Math.min(350, Math.round(rd - decay + shock)));
 }
 
 /**
- * Per-player CHIMERA Elo calibration.
- * When the human crushes CHIMERA faster than expected, stored CHIMERA Elo rises toward
- * the strength needed for a fair fight (perceived user + challenge margin).
+ * Per-player CHIMERA calibration (explicit Elo math).
+ *
+ * E(R_u, R_c) = 1 / (1 + 10^((R_c − R_u) / 400))
+ * S = performance score from result, move efficiency, mistakes
+ * ΔR_c = K × (S_chimera − E(R_c, R_u))  with S_chimera = 1 − S for pairing symmetry on wins/losses
+ *
+ * ΔR_c = K × (S − E(R_u, R_c)) — user outperforming raises CHIMERA toward your level.
  */
 export function calibrateAfterGame(input: CalibrateGameInput): CalibrateGameResult {
   const {
@@ -131,65 +186,94 @@ export function calibrateAfterGame(input: CalibrateGameInput): CalibrateGameResu
     game,
   } = input;
 
-  const userScore = resultToScore(game.result, true);
-  const anchorUser = blendAnchorUser(
+  const { resultScore, efficiencyFactor, mistakePenalty, performanceScore } =
+    performanceScoreFromGame(game);
+
+  const userRating = blendUserRatingForExpected(
     calibration.perceivedUserElo,
     crsAnchorElo,
     calibration.calibrationGames
   );
-  const expected = expectedScore(anchorUser, playedChimeraElo);
-  let surprise = userScore - expected;
-  surprise *= moveEfficiencyMultiplier(game.result, game.moves.length);
+
+  const expected = expectedScore(userRating, playedChimeraElo);
+  const surprise = performanceScore - expected;
 
   const games = calibration.calibrationGames + 1;
-  const k = calibrationKFactor(games, calibration.confidence);
-  const cap = maxSingleStep(games, calibration.confidence);
+  const rd = calibration.ratingDeviation ?? initialRatingDeviation(games);
+  const k = calibrationKFromRd(rd);
 
   let chimeraDelta = Math.round(k * surprise);
-  chimeraDelta = Math.max(-cap, Math.min(cap, chimeraDelta));
+  let perceivedDelta = Math.round(k * surprise);
+
+  const maxStep = Math.round(120 / Math.sqrt(1 + games / 6));
+  chimeraDelta = Math.max(-maxStep, Math.min(maxStep, chimeraDelta));
+  perceivedDelta = Math.max(-maxStep, Math.min(maxStep, perceivedDelta));
 
   let newStored = clampElo(storedChimeraElo + chimeraDelta, 80, 3200);
 
-  const target = challengeTargetElo(anchorUser);
-  if (userScore >= 0.5 && newStored < target - 90) {
-    const pull = Math.min(cap, Math.round((target - newStored) * 0.42));
-    newStored = clampElo(newStored + pull, 80, 3200);
-    chimeraDelta = newStored - storedChimeraElo;
-  } else if (userScore <= 0 && newStored > target + 120) {
-    const pull = Math.min(cap, Math.round((newStored - target) * 0.35));
-    newStored = clampElo(newStored - pull, 80, 3200);
+  const target = targetChimeraElo(userRating);
+  const gap = target - newStored;
+  const settleWeight = Math.max(0, 1 - confidenceFromRd(rd)) * 0.28;
+  if (Math.abs(gap) > 40 && settleWeight > 0) {
+    const pull = Math.round(gap * settleWeight);
+    const capped = Math.max(-maxStep, Math.min(maxStep, pull));
+    newStored = clampElo(newStored + capped, 80, 3200);
     chimeraDelta = newStored - storedChimeraElo;
   }
 
-  const perceivedK = Math.round(k * 0.52);
-  let perceivedDelta = Math.round(perceivedK * surprise);
-  perceivedDelta = Math.max(-cap, Math.min(cap, perceivedDelta));
   const newPerceived = clampElo(
     calibration.perceivedUserElo + perceivedDelta,
     100,
     3200
   );
 
-  const confidence = Math.min(1, 1 - Math.exp(-games / 16));
+  const newRd = updateRatingDeviation(rd, games, surprise);
+  const confidence = confidenceFromRd(newRd);
 
-  const note =
-    surprise > 0.35
-      ? "You outplayed this CHIMERA setting — strength increased."
-      : surprise < -0.35
-        ? "CHIMERA had your measure — strength eased."
-        : "Fine-tuning CHIMERA for your level.";
+  const math: CalibrationMathSnapshot = {
+    at: Date.now(),
+    userRating,
+    chimeraPlayedElo: playedChimeraElo,
+    chimeraStoredBefore: storedChimeraElo,
+    chimeraStoredAfter: newStored,
+    resultScore,
+    efficiencyFactor,
+    mistakePenalty,
+    performanceScore,
+    expectedScore: expected,
+    surprise,
+    kFactor: k,
+    chimeraDelta,
+    perceivedUserDelta: perceivedDelta,
+    fullMoves: fullMovesFromPlies(game.moves.length),
+    ratingDeviation: newRd,
+  };
 
   return {
     newStoredElo: newStored,
-    delta: newStored - storedChimeraElo,
+    delta: chimeraDelta,
     calibration: {
       perceivedUserElo: newPerceived,
       confidence,
       calibrationGames: games,
+      ratingDeviation: newRd,
       lastPlayedElo: playedChimeraElo,
+      lastSnapshot: math,
     },
-    note,
+    math,
   };
+}
+
+export function formatExpectedScoreFormula(
+  userR: number,
+  chimeraR: number
+): string {
+  return `E = 1 / (1 + 10^(${chimeraR} − ${userR}) / ${ELO_SCALE})`;
+}
+
+export function formatExpectedScoreValue(userR: number, chimeraR: number): string {
+  const e = expectedScore(userR, chimeraR);
+  return `E ≈ ${(e * 100).toFixed(1)}%`;
 }
 
 export function calibrationStatusLabel(
@@ -197,7 +281,10 @@ export function calibrationStatusLabel(
 ): string | null {
   if (calibration.confidence >= 0.82) return null;
   const pct = Math.round(calibration.confidence * 100);
-  return `Calibrating · ${pct}%`;
+  const rd = calibration.ratingDeviation ?? initialRatingDeviation(
+    calibration.calibrationGames
+  );
+  return `σ ${rd} · ${pct}%`;
 }
 
 export function runCalibrationSanityChecks(): void {
@@ -205,6 +292,7 @@ export function runCalibrationSanityChecks(): void {
     perceivedUserElo: 400,
     confidence: 0.1,
     calibrationGames: 2,
+    ratingDeviation: 280,
     lastPlayedElo: 250,
   };
   const wipe = calibrateAfterGame({
@@ -227,10 +315,31 @@ export function runCalibrationSanityChecks(): void {
       openingLine: "",
     },
   });
-  if (wipe.delta < 40) {
+  if (wipe.delta < 35) {
     throw new Error(
       `Expected large CHIMERA bump after fast win, got delta=${wipe.delta}`
     );
+  }
+  if (wipe.math.performanceScore <= wipe.math.expectedScore) {
+    throw new Error("Performance score should exceed expected on fast win");
+  }
+
+  const perf = performanceScoreFromGame({
+    id: "p",
+    startedAt: 0,
+    endedAt: 1,
+    userColor: "w",
+    moves: Array.from({ length: 30 }, () => ({
+      uci: "e2e4",
+      fen: "",
+      by: "user" as const,
+    })),
+    mistakes: [],
+    result: "user-win",
+    openingLine: "",
+  });
+  if (perf.performanceScore < 0.99) {
+    throw new Error(`Quick win S should be ~1, got ${perf.performanceScore}`);
   }
 
   const loss = calibrateAfterGame({
@@ -240,6 +349,7 @@ export function runCalibrationSanityChecks(): void {
       perceivedUserElo: 900,
       confidence: 0.3,
       calibrationGames: 5,
+      ratingDeviation: 220,
     },
     crsAnchorElo: 880,
     game: {

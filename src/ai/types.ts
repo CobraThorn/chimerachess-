@@ -50,13 +50,36 @@ export interface StoredGame {
   userMoveTimesMs?: number[];
 }
 
+/** Last game's Elo math (shown to players). */
+export interface CalibrationMathSnapshot {
+  at: number;
+  userRating: number;
+  chimeraPlayedElo: number;
+  chimeraStoredBefore: number;
+  chimeraStoredAfter: number;
+  resultScore: number;
+  efficiencyFactor: number;
+  mistakePenalty: number;
+  performanceScore: number;
+  expectedScore: number;
+  surprise: number;
+  kFactor: number;
+  chimeraDelta: number;
+  perceivedUserDelta: number;
+  fullMoves: number;
+  ratingDeviation: number;
+}
+
 /** Per-player estimate of human strength + how settled CHIMERA Elo is. */
 export interface ChimeraCalibrationState {
   perceivedUserElo: number;
   /** 0–1 — low = still finding the right CHIMERA level */
   confidence: number;
   calibrationGames: number;
+  /** Rating deviation σ (lower = more certain). */
+  ratingDeviation?: number;
   lastPlayedElo?: number;
+  lastSnapshot?: CalibrationMathSnapshot;
 }
 
 export interface ChimeraMemory {
@@ -76,6 +99,8 @@ export interface ChimeraMemory {
   chimeraElo: number;
   /** Adaptive calibration — perceived you + settled CHIMERA strength */
   chimeraCalibration?: ChimeraCalibrationState;
+  /** Last vs-CHIMERA game Elo math (player-facing breakdown) */
+  lastCalibrationMath?: CalibrationMathSnapshot;
   /** Vs-you CHIMERA behavioural fingerprint */
   chimeraOpponent?: PlayStyleProfile;
   /** Vs-you CHIMERA cognitive archetype (Oracle Prime, etc.) */

@@ -218,6 +218,7 @@ export function finishGame(
   let chimeraElo = chimeraEloBefore;
   let chimeraDelta = 0;
   let chimeraCalibration = ensureChimeraCalibration(memory);
+  let lastCalibrationMath = memory.lastCalibrationMath;
 
   if (isChimeraCalibrationGame(crsOptions?.mode)) {
     const calibrated = calibrateAfterGame({
@@ -230,6 +231,7 @@ export function finishGame(
     chimeraElo = calibrated.newStoredElo;
     chimeraDelta = calibrated.delta;
     chimeraCalibration = calibrated.calibration;
+    lastCalibrationMath = calibrated.math;
   }
 
   userStyle = {
@@ -253,6 +255,7 @@ export function finishGame(
       adaptation,
       chimeraElo,
       chimeraCalibration,
+      lastCalibrationMath,
       userStyle,
       chimera1: memory.chimera1,
       chimera2: memory.chimera2,

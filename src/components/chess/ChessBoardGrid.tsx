@@ -248,7 +248,7 @@ export default function ChessBoardGrid({
   );
 
   const finishPointer = useCallback(
-    async (clientX: number, clientY: number, fallbackSq: Square) => {
+    (clientX: number, clientY: number, fallbackSq: Square) => {
       detachWindowDrag();
       const session = dragSession.current;
       dragSession.current = null;
@@ -266,10 +266,9 @@ export default function ChessBoardGrid({
 
       if (session.dragging && dropSq !== null) {
         refreshBoardRect();
-        await snapGhostToSquare(dropSq);
         skipNextSlideRef.current = true;
         hideGhost();
-        onSquareClick(dropSq);
+        void snapGhostToSquare(dropSq).then(() => onSquareClick(dropSq));
         return;
       }
 
@@ -384,19 +383,13 @@ export default function ChessBoardGrid({
     [interactive, onPiecePress, refreshBoardRect, state.board]
   );
 
-  const onGridPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      const target = (e.target as HTMLElement).closest<HTMLElement>(
-        "[data-square]"
-      );
-      if (!target) return;
-      const raw = target.dataset.square;
-      if (raw === undefined) return;
-      const sq = Number(raw) as Square;
-      if (sq < 0 || sq > 63) return;
-      onSquarePointerDown(sq, e);
+  const squarePointerDownRef = useRef(onSquarePointerDown);
+  squarePointerDownRef.current = onSquarePointerDown;
+  const handleSquarePointerDown = useCallback(
+    (sq: Square, e: React.PointerEvent) => {
+      squarePointerDownRef.current(sq, e);
     },
-    [onSquarePointerDown]
+    []
   );
 
   const slideGlide = slide
@@ -429,8 +422,7 @@ export default function ChessBoardGrid({
       >
         <div
           className="grid size-full grid-cols-8 grid-rows-8 border box-border"
-          style={{ borderColor: boardTheme.border, contain: "layout style paint" }}
-          onPointerDown={interactive ? onGridPointerDown : undefined}
+          style={{ borderColor: boardTheme.border }}
         >
           {Array.from({ length: 64 }, (_, visualIndex) => {
             const vr = Math.floor(visualIndex / 8);
@@ -467,6 +459,9 @@ export default function ChessBoardGrid({
                 isEngineTo={engineHighlight?.to === sq}
                 heat={squareHeats?.get(sq)}
                 hidePiece={hideForSlide}
+                onPointerDown={
+                  interactive ? (e) => handleSquarePointerDown(sq, e) : undefined
+                }
               />
             );
           })}

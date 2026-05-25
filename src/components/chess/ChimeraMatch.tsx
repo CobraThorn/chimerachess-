@@ -12,6 +12,7 @@ import {
   calibrationStatusLabel,
   ensureChimeraCalibration,
   effectiveChimeraElo,
+  targetChimeraElo,
   loadMemory,
   saveMemory,
   createPersonaPlayStyle,
@@ -29,6 +30,7 @@ import {
 } from "../../ai/types";
 import ChimeraMemoryRadar from "./ChimeraMemoryRadar";
 import ChimeraLearningPanel from "./ChimeraLearningPanel";
+import ChimeraCalibrationMath from "./ChimeraCalibrationMath";
 import ChessBoardGrid from "./ChessBoardGrid";
 import ChessPiece from "./ChessPiece";
 import CognitiveArchetypePanel from "./CognitiveArchetypePanel";
@@ -775,9 +777,27 @@ export default function ChimeraMatch() {
             )}
           </AnimatePresence>
         </div>
+
+        {showEloDelta && memory.lastCalibrationMath && (
+          <div className="mt-4 w-full max-w-[min(100%,32rem)]">
+            <ChimeraCalibrationMath math={memory.lastCalibrationMath} />
+          </div>
+        )}
       </div>
 
       <aside className="glass-panel w-full max-w-sm rounded-sm p-6 lg:sticky lg:top-28">
+        {memory.chimeraCalibration && (
+          <p className="mb-4 font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.4)]">
+            Perceived you:{" "}
+            <span className="text-gold-glow">
+              {memory.chimeraCalibration.perceivedUserElo}
+            </span>{" "}
+            · Target R<sub>c</sub>:{" "}
+            <span className="text-[rgba(0,229,255,0.75)]">
+              {targetChimeraElo(memory.chimeraCalibration.perceivedUserElo)}
+            </span>
+          </p>
+        )}
         <h3 className="font-[family-name:var(--font-display)] text-lg text-gold-glow">
           CHIMERA Memory
         </h3>
