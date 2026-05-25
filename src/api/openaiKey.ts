@@ -1,4 +1,4 @@
-import { healthEndpoint } from "./chimeraBackend";
+import { chimeraFetch } from "./client";
 
 const STORAGE_KEY = "chimera-openai-api-key";
 
@@ -30,7 +30,7 @@ export function setOpenAiApiKey(key: string): void {
 
 export async function probeServerOpenAiCoach(): Promise<boolean> {
   try {
-    const res = await fetch(healthEndpoint(), { method: "GET" });
+    const res = await chimeraFetch("/health", { method: "GET" });
     if (!res.ok) {
       serverCoachEnabled = false;
       return false;

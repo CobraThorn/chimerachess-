@@ -1,8 +1,8 @@
 import { loadAccount, loadDataEvents, saveDataEvents } from "../account/storage";
 import type { DataCollectionEvent, UserAccount } from "../account/types";
 import { ACCOUNT_EVENT } from "../account/types";
-import { resolveApiBase } from "../config/productionApi";
 import { friendlyCloudError } from "../utils/userFacingError";
+import { chimeraFetch, parseJsonResponse, resolveApiBase } from "./client";
 import { getSessionToken, sessionHeaders } from "./session";
 
 const SYNC_QUEUE_KEY = "chimera-sync-queue-v3";
@@ -22,24 +22,9 @@ export interface SyncResult {
   error?: string;
 }
 
-function apiBase(): string {
-  return resolveApiBase();
-}
-
 export function isBackendConfigured(): boolean {
   if (import.meta.env.DEV) return true;
-  return !!apiBase();
-}
-
-/** In dev, Vite proxies /api/chimera → localhost:8787 */
-export function syncEndpoint(): string {
-  const base = apiBase();
-  return base ? `${base}/api/chimera/sync` : "/api/chimera/sync";
-}
-
-export function healthEndpoint(): string {
-  const base = apiBase();
-  return base ? `${base}/api/chimera/health` : "/api/chimera/health";
+  return !!resolveApiBase();
 }
 
 function loadQueue(): DataCollectionEvent[] {
@@ -101,19 +86,9 @@ function accountPayload(account: UserAccount) {
   };
 }
 
-async function parseJsonResponse<T>(res: Response): Promise<T | null> {
-  const text = await res.text();
-  if (!text.trim()) return null;
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
-
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const res = await fetch(healthEndpoint(), { method: "GET" });
+    const res = await chimeraFetch("/health", { method: "GET" });
     if (!res.ok) return false;
     const data = await parseJsonResponse<{ ok?: boolean }>(res);
     return !!data?.ok;
@@ -143,7 +118,7 @@ export async function syncToBackend(): Promise<SyncResult> {
   const events = [...unique.values()];
 
   try {
-    const res = await fetch(syncEndpoint(), {
+    const res = await chimeraFetch("/sync", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

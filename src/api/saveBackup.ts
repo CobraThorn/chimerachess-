@@ -1,32 +1,20 @@
-import { resolveApiBase } from "../config/productionApi";
 import type { ChimeraSaveBundle } from "../chimeraSetup/types";
 import type { UserAccount } from "../account/types";
+import { chimeraFetch, parseJsonResponse } from "./client";
 import { sessionHeaders } from "./session";
-
-function backupEndpoint(): string {
-  const base = resolveApiBase();
-  return base ? `${base}/api/chimera/backup` : "/api/chimera/backup";
-}
-
-async function parseBody<T>(res: Response): Promise<T | null> {
-  const text = await res.text();
-  if (!text.trim()) return null;
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
 
 export async function fetchUserBackup(
   accountId: string
 ): Promise<ChimeraSaveBundle | null> {
   try {
-    const res = await fetch(
-      `${backupEndpoint()}?accountId=${encodeURIComponent(accountId)}`,
-      { method: "GET", headers: sessionHeaders() }
+    const res = await chimeraFetch(
+      "/backup",
+      { method: "GET", headers: sessionHeaders() },
+      { accountId }
     );
-    const data = await parseBody<{ ok?: boolean; save?: ChimeraSaveBundle }>(res);
+    const data = await parseJsonResponse<{ ok?: boolean; save?: ChimeraSaveBundle }>(
+      res
+    );
     if (!res.ok || !data?.ok || !data.save) return null;
     return data.save;
   } catch {
@@ -50,7 +38,7 @@ export async function uploadUserBackup(
   >
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await fetch(backupEndpoint(), {
+    const res = await chimeraFetch("/backup", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -67,7 +55,7 @@ export async function uploadUserBackup(
           : undefined,
       }),
     });
-    const data = await parseBody<{ ok?: boolean; error?: string }>(res);
+    const data = await parseJsonResponse<{ ok?: boolean; error?: string }>(res);
     if (!res.ok || !data?.ok) {
       return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
     }

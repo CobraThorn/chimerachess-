@@ -17,6 +17,7 @@
     "test:chess": "npx --yes tsx scripts/test-chess-rules.ts",
     "test:parity": "npx --yes tsx scripts/test-online-chess-parity.ts",
     "test:online-terminal": "npx --yes tsx scripts/test-online-terminal.ts",
+    "test:api-client": "npx --yes tsx scripts/test-api-client-urls.ts",
     "test:review": "npx --yes tsx scripts/test-game-review.ts"
   },
   "dependencies": {

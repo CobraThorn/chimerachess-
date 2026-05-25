@@ -1,26 +1,17 @@
-import { resolveApiBase } from "../config/productionApi";
+import {
+  byokOpenAiUrl,
+  chimeraFetch,
+  externalFetch,
+} from "./client";
 import { getByokOpenAiKey } from "./openaiKey";
 import { sessionHeaders } from "./session";
-
-function chimeraOpenAiUrl(): string {
-  const base = resolveApiBase();
-  return base
-    ? `${base}/api/chimera/openai/chat`
-    : "/api/chimera/openai/chat";
-}
-
-function byokOpenAiUrl(): string {
-  return import.meta.env.DEV
-    ? "/api/openai/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
-}
 
 async function postChat(
   body: Record<string, unknown>
 ): Promise<Response | null> {
   const byok = getByokOpenAiKey();
   if (byok) {
-    return fetch(byokOpenAiUrl(), {
+    return externalFetch(byokOpenAiUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -30,7 +21,7 @@ async function postChat(
     });
   }
 
-  return fetch(chimeraOpenAiUrl(), {
+  return chimeraFetch("/openai/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -1,6 +1,6 @@
 import type { DataConsents, UserAccount } from "../account/types";
 import type { ChimeraSaveBundle } from "../chimeraSetup/types";
-import { chimeraApiUrl } from "../config/productionApi";
+import { chimeraFetch, parseJsonResponse } from "./client";
 import { clearSessionToken, setSessionToken } from "./session";
 
 export interface RemoteAccount {
@@ -14,16 +14,6 @@ export interface RemoteAccount {
   chimeraSetupComplete?: boolean;
 }
 
-async function parseBody<T>(res: Response): Promise<T | null> {
-  const text = await res.text();
-  if (!text.trim()) return null;
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
-
 export interface LoginLookupResult {
   account: RemoteAccount;
   save: ChimeraSaveBundle | null;
@@ -35,12 +25,12 @@ export async function loginRemote(
   password: string
 ): Promise<LoginLookupResult | null> {
   try {
-    const res = await fetch(chimeraApiUrl("/api/chimera/login"), {
+    const res = await chimeraFetch("/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const data = await parseBody<{
+    const data = await parseJsonResponse<{
       ok?: boolean;
       account?: RemoteAccount;
       save?: ChimeraSaveBundle;
@@ -69,12 +59,12 @@ export async function registerAccountRemote(
   password: string
 ): Promise<{ ok: boolean; sessionToken?: string; error?: string }> {
   try {
-    const res = await fetch(chimeraApiUrl("/api/chimera/register"), {
+    const res = await chimeraFetch("/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ account, password }),
     });
-    const data = await parseBody<{
+    const data = await parseJsonResponse<{
       ok?: boolean;
       sessionToken?: string;
       error?: string;
