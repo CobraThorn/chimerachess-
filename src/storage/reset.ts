@@ -1,5 +1,5 @@
 /** Bump when all browsers must drop prior local user state. */
-export const CHIMERA_STORAGE_GENERATION = 3;
+export const CHIMERA_STORAGE_GENERATION = 4;
 
 const GENERATION_KEY = "chimera-storage-generation";
 

@@ -11,7 +11,7 @@ const DATA_DIR =
   process.env.CHIMERA_DATA_DIR?.trim() ||
   path.join(__dirname, "..", "server", "data");
 
-const DIRS = ["accounts", "events", "backups"];
+const DIRS = ["accounts", "events", "backups", "sessions"];
 
 async function wipeDir(dir) {
   let removed = 0;
@@ -31,11 +31,11 @@ async function main() {
     await fs.mkdir(dir, { recursive: true });
     total += await wipeDir(dir);
   }
-  const marker = path.join(DATA_DIR, ".chimera-storage-generation-3");
-  await fs.writeFile(
-    marker,
-    JSON.stringify({ wipedAt: Date.now(), via: "wipe-chimera-data.mjs" }, null, 2)
-  );
+  const names = await fs.readdir(DATA_DIR).catch(() => []);
+  for (const name of names) {
+    if (!name.startsWith(".chimera-storage-generation-")) continue;
+    await fs.unlink(path.join(DATA_DIR, name)).catch(() => {});
+  }
   console.log(`Wiped ${total} file(s) under ${DATA_DIR}`);
 }
 
