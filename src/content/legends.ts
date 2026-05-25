@@ -119,19 +119,19 @@ export const LEGENDS: LegendProfile[] = [
     ],
     radar: refRadar("carlsen"),
     game: {
-      title: "Berlin Initiative",
-      event: "World Championship style Ruy Lopez",
+      title: "The b5 Breakthrough",
+      event: "World Championship, New York (Game 10)",
       year: 2016,
       opponent: "Sergey Karjakin",
       result: "1–0",
       legendColor: "w",
-      highlightPly: 18,
+      highlightPly: 113,
       keyMoment: {
-        title: "Carlsen tightens the squeeze",
+        title: "57.b5! — Carlsen cracks the Berlin wall",
         explanation:
-          "Magnus improves his worst piece and trades into a structure where only he knows which ending to aim for. The eval may look equal, but the practical burden shifts entirely to the defender.",
+          "After hours of maneuvering in this anti-Berlin Ruy Lopez, Karjakin's 56…Rhh7? left the e6-pawn loose. Magnus plays 57.b5!, the thematic breakthrough that turned a grueling positional battle into a winning endgame and leveled the match at 5–5.",
         teachingPoint:
-          "Winning technique often means a quiet move that restricts counterplay — not always a tactical bolt.",
+          "In closed Berlin structures, watch for pawn breaks when a defender's rook is misplaced — one tempo on b5 can be the whole game.",
       },
       moves: moves.magnus,
     },
