@@ -74,12 +74,9 @@ export default function StockfishAnalysis() {
     status.type === "draw";
 
   const runEngine = useCallback(async () => {
-    const engine = stockfish;
-    if (!engine?.ready || !analysisOn || gameOver) {
+    const engine = engineRef.current;
+    if (!engine?.ready || !analysisOn) {
       setThinking(false);
-      if (gameOver) {
-        setTopMoves([]);
-      }
       return;
     }
 
@@ -106,19 +103,23 @@ export default function StockfishAnalysis() {
       if (analysisGen.current !== gen) return;
       if (toFen(stateRef.current) === targetFen) {
         if (result.primary) setLive(result.primary);
-        setTopMoves(
-          result.lines.map((l) => ({
-            move: l.move,
-            cp: l.cp,
-          }))
-        );
+        if (result.lines.length > 0) {
+          setTopMoves(
+            result.lines.map((l) => ({
+              move: l.move,
+              cp: l.cp,
+            }))
+          );
+        }
       }
+    } catch {
+      /* superseded by a newer position */
     } finally {
       if (analysisGen.current === gen) {
         setThinking(false);
       }
     }
-  }, [analysisOn, analysisMode, gameOver, stockfish]);
+  }, [analysisOn, analysisMode, sfReady]);
 
   useEffect(() => {
     if (!sfReady) return;
@@ -341,7 +342,7 @@ export default function StockfishAnalysis() {
             </p>
             {topMoves.length === 0 ? (
               <p className="mt-2 font-[family-name:var(--font-body)] text-[10px] text-[rgba(255,255,255,0.3)]">
-                {thinking ? "Calculating…" : "Make a move to analyze."}
+                {thinking ? "Calculating…" : "Waiting for engine…"}
               </p>
             ) : (
               <ul className="mt-2 space-y-2">

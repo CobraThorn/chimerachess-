@@ -157,11 +157,16 @@ export function runFullAnalysis(
   const lineMap = new Map<number, { move: string; cp: number }>();
 
   let settle: ((r: FullAnalysisResult) => void) | null = null;
+  let rejectDone: ((reason?: unknown) => void) | null = null;
+
+  const sortedLines = () =>
+    [...lineMap.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
 
   const finish = (result: FullAnalysisResult) => {
-    if (!settle) return;
+    if (cancelled || !settle) return;
     const s = settle;
     settle = null;
+    rejectDone = null;
     clearTimeout(timeoutId);
     s(result);
   };
@@ -170,69 +175,92 @@ export function runFullAnalysis(
     if (cancelled || !settle) return;
     engine.invalidateAnalysisHook();
     engine.stop();
-    finish({ primary, lines: [...lineMap.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v) });
+    finish({ primary, lines: sortedLines() });
   }, ANALYSIS_TIMEOUT_MS);
 
-  const done = new Promise<FullAnalysisResult>((resolve) => {
+  const onEngineLine = (line: string) => {
+    if (cancelled) return;
+
+    if (line.startsWith("bestmove")) {
+      engine.invalidateAnalysisHook();
+      engine.send("setoption name MultiPV value 1", () => {
+        engine.send("isready", () => finish({ primary, lines: sortedLines() }));
+      });
+      return;
+    }
+
+    if (!line.startsWith("info ")) return;
+    const parsed = parseInfoLine(line, fen);
+    if (parsed) {
+      if (!primary || parsed.depth >= primary.depth || primary.depth === 0) {
+        primary = parsed;
+        onUpdate(parsed);
+      }
+    }
+
+    const pvM = line.match(/\spv\s+(\S+)/);
+    if (!pvM) return;
+
+    const mpvM = line.match(/\bmultipv (\d+)/);
+    const idx = mpvM ? parseInt(mpvM[1], 10) : 1;
+    const cpM = line.match(/score cp (-?\d+)/);
+    const mateM = line.match(/score mate (-?\d+)/);
+    let stmCp = 0;
+    if (mateM) {
+      const mateIn = parseInt(mateM[1], 10);
+      stmCp = mateIn > 0 ? 100000 - mateIn : -100000 - mateIn;
+    } else if (cpM) {
+      stmCp = parseInt(cpM[1], 10);
+    } else return;
+
+    lineMap.set(idx, {
+      move: pvM[1],
+      cp: cpForWhite(fen, stmCp),
+    });
+  };
+
+  const startSearch = () => {
+    if (cancelled || !settle) return;
+    engine.setAnalysisHook(onEngineLine);
+    engine.send(`position fen ${fen}`);
+    engine.send(goCmd);
+  };
+
+  const done = new Promise<FullAnalysisResult>((resolve, reject) => {
     settle = resolve;
+    rejectDone = reject;
 
     engine.invalidateAnalysisHook();
     engine.stop();
-    engine.setAnalysisHook((line) => {
-      if (cancelled) return;
 
-      if (line.startsWith("bestmove")) {
-        engine.invalidateAnalysisHook();
-        engine.send("setoption name MultiPV value 1");
-        const lines = [...lineMap.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .map(([, v]) => v);
-        finish({ primary, lines });
-        return;
+    const armMultiPv = () => {
+      if (ANALYSIS_MULTIPV > 1) {
+        engine.send(`setoption name MultiPV value ${ANALYSIS_MULTIPV}`, () => {
+          engine.send("isready", startSearch);
+        });
+      } else {
+        engine.send("setoption name MultiPV value 1", () => {
+          engine.send("isready", startSearch);
+        });
       }
-
-      if (!line.startsWith("info ")) return;
-      const parsed = parseInfoLine(line, fen);
-      if (parsed) {
-        if (!primary || parsed.depth >= primary.depth || primary.depth === 0) {
-          primary = parsed;
-          onUpdate(parsed);
-        }
-      }
-
-      const pvM = line.match(/\spv\s+(\S+)/);
-      if (!pvM) return;
-
-      const mpvM = line.match(/\bmultipv (\d+)/);
-      const idx = mpvM ? parseInt(mpvM[1], 10) : 1;
-      const cpM = line.match(/score cp (-?\d+)/);
-      const mateM = line.match(/score mate (-?\d+)/);
-      let stmCp = 0;
-      if (mateM) {
-        const mateIn = parseInt(mateM[1], 10);
-        stmCp = mateIn > 0 ? 100000 - mateIn : -100000 - mateIn;
-      } else if (cpM) {
-        stmCp = parseInt(cpM[1], 10);
-      } else return;
-
-      lineMap.set(idx, {
-        move: pvM[1],
-        cp: cpForWhite(fen, stmCp),
-      });
-    });
-
-    engine.send(`setoption name MultiPV value ${ANALYSIS_MULTIPV}`);
-    engine.send(`position fen ${fen}`);
-    engine.send(goCmd);
+    };
+    armMultiPv();
   });
 
   return {
     cancel: () => {
+      if (cancelled) return;
       cancelled = true;
       engine.invalidateAnalysisHook();
-      engine.send("setoption name MultiPV value 1");
       engine.stop();
-      finish({ primary: null, lines: [] });
+      engine.send("setoption name MultiPV value 1");
+      clearTimeout(timeoutId);
+      if (rejectDone) {
+        const rej = rejectDone;
+        settle = null;
+        rejectDone = null;
+        rej(new Error("cancelled"));
+      }
     },
     done,
   };
